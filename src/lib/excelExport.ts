@@ -1,3 +1,6 @@
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import * as XLSX from 'xlsx';
 import { loadAllAppData } from './storage';
 
@@ -192,6 +195,26 @@ export function exportAppToExcel(appData?: ReturnType<typeof loadAllAppData>) {
 
   // Write workbook to binary array
   try {
+    
+    if (Capacitor.isNativePlatform()) {
+      const base64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+      Filesystem.writeFile({
+        path: fileName,
+        data: base64,
+        directory: Directory.Cache
+      }).then((result) => {
+        Share.share({
+          title: 'Planilha Controle Financeiro',
+          text: `Planilha financeira gerada em ${new Date().toLocaleDateString('pt-BR')}`,
+          url: result.uri,
+          dialogTitle: 'Compartilhar Planilha'
+        }).catch(err => console.warn('Share error', err));
+      }).catch(err => {
+        console.warn('File write error', err);
+      });
+      return;
+    }
+
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([excelBuffer], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
