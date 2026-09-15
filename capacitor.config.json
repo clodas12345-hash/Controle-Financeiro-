@@ -1,0 +1,8 @@
+{
+  "appId": "com.gkd.mobility",
+  "appName": "Controle Financeiro",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

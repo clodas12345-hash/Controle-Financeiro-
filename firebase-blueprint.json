@@ -1,0 +1,21 @@
+{
+  "entities": {
+    "UserAppState": {
+      "title": "User App State",
+      "description": "Stores user transactions, bills, credit cards, pets, company info and settings",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "data": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "data"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/appState/main": {
+      "schema": "UserAppState",
+      "description": "Main user state document containing all financial records and settings."
+    }
+  }
+}

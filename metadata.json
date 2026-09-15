@@ -1,0 +1,10 @@
+{
+  "name": "Controle Financeiro",
+  "description": "Aplicativo de gestão financeira, controle de contas a pagar, faturamento de mobilidade/entregas, gastos residenciais, manutenção de veículos e armazenamento 100% local com total privacidade.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

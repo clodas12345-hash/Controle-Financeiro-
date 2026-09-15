@@ -1,0 +1,31 @@
+{
+  "id": "/",
+  "scope": "/",
+  "start_url": "/",
+  "name": "Controle Financeiro",
+  "short_name": "Controle Financeiro",
+  "description": "Aplicativo de gestão financeira, controle de contas e despesas",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "window-controls-overlay"],
+  "orientation": "portrait-primary",
+  "background_color": "#0a0a0c",
+  "theme_color": "#161618",
+  "categories": ["finance", "productivity", "business"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
