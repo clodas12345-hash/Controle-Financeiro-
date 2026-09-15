@@ -70,11 +70,11 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   const summary = payload.summary;
 
   // 1. Universal Export (Native Share on Android/APK + Download on Desktop)
-  const handleUniversalBackup = async () => {
+  const handleUniversalBackup = async (mode: 'download' | 'share' = 'download') => {
     setIsExporting(true);
     setStatus({ type: 'idle', message: '' });
     try {
-      const res = await exportFullBackupUniversal(appData);
+      const res = await exportFullBackupUniversal(appData, mode);
       setStatus({
         type: 'success',
         message: res.message || `Backup gerado com sucesso (${res.totalRecords} itens).`,

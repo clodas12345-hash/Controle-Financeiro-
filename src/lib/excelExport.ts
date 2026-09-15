@@ -198,20 +198,37 @@ export function exportAppToExcel(appData?: ReturnType<typeof loadAllAppData>) {
     
     if (Capacitor.isNativePlatform()) {
       const base64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
-      Filesystem.writeFile({
-        path: fileName,
-        data: base64,
-        directory: Directory.Documents
-      }).then((result) => {
-        Share.share({
-          title: 'Planilha Controle Financeiro',
-          text: `Planilha financeira gerada em ${new Date().toLocaleDateString('pt-BR')}`,
-          url: result.uri,
-          dialogTitle: 'Compartilhar Planilha'
-        }).catch(err => console.warn('Share error', err));
-      }).catch(err => {
-        console.warn('File write error', err);
-      });
+      
+      const saveAndShare = async () => {
+        try {
+          // Request permissions first
+          const permStatus = await Filesystem.checkPermissions();
+          if (permStatus.publicStorage !== 'granted') {
+            await Filesystem.requestPermissions();
+          }
+
+          // Save to public Downloads folder
+          const result = await Filesystem.writeFile({
+            path: 'Download/' + fileName,
+            data: base64,
+            directory: Directory.ExternalStorage
+          });
+          
+          alert('Planilha salva com sucesso na pasta DOWNLOADS do seu celular!');
+          
+          // Still offer to share to WhatsApp
+          await Share.share({
+            title: 'Planilha Controle Financeiro',
+            text: `Planilha financeira gerada em ${new Date().toLocaleDateString('pt-BR')}`,
+            url: result.uri,
+            dialogTitle: 'Compartilhar Planilha'
+          });
+        } catch (err) {
+          console.warn('Native share/write failed:', err);
+          alert('Erro ao salvar no celular. Tente verificar as permissões.');
+        }
+      };
+      saveAndShare();
       return;
     }
 

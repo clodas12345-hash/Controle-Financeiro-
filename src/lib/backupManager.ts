@@ -207,10 +207,19 @@ export async function exportFullBackupUniversal(
   if (Capacitor.isNativePlatform()) {
     try {
       if (mode === 'download') {
+        // Explicitly request permissions for Directory.Documents
+        const permStatus = await Filesystem.checkPermissions();
+        if (permStatus.publicStorage !== 'granted') {
+          const req = await Filesystem.requestPermissions();
+          if (req.publicStorage !== 'granted') {
+            throw new Error('Permissão de armazenamento negada pelo usuário.');
+          }
+        }
+        
         await Filesystem.writeFile({
-          path: filename,
+          path: 'Download/' + filename,
           data: jsonStr,
-          directory: Directory.Documents,
+          directory: Directory.ExternalStorage,
           encoding: Encoding.UTF8
         });
         return {
@@ -218,11 +227,11 @@ export async function exportFullBackupUniversal(
           filename,
           totalRecords: payload.summary.totalRecords,
           method: 'downloaded',
-          message: 'Arquivo de backup salvo com sucesso na pasta Documentos do seu celular!',
+          message: 'Arquivo de backup salvo com sucesso na pasta Downloads do seu celular!',
         };
       } else {
         const result = await Filesystem.writeFile({
-          path: filename,
+          path: 'Download/' + filename,
           data: jsonStr,
           directory: Directory.Cache,
           encoding: Encoding.UTF8
@@ -241,9 +250,12 @@ export async function exportFullBackupUniversal(
           message: 'Backup enviado para compartilhamento.',
         };
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Native share/write failed:', err);
-      // Fallback
+      if (mode === 'download') {
+        throw new Error(err?.message || 'Falha ao salvar arquivo no armazenamento do celular.');
+      }
+      // If it's 'share' and it failed, we can let it fall back
     }
   }
 
@@ -262,7 +274,7 @@ export async function exportFullBackupUniversal(
           filename,
           totalRecords: payload.summary.totalRecords,
           method: 'shared',
-          message: `Backup salvo na pasta Documentos do seu celular! Você também pode compartilhar agora.`,
+          message: `Backup salvo na pasta Downloads do seu celular! Você também pode compartilhar agora.`,
         };
       }
     } catch (shareErr: any) {
