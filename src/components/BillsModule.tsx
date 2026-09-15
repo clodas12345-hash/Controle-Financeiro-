@@ -17,10 +17,15 @@ import {
   X,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Calculator,
-  Camera} from 'lucide-react';
+  Camera,
+  CalendarClock,
+  CopyX
+} from 'lucide-react';
 import { Bill, CategoryScope, Transaction, TransactionCategory, PaymentMethod, isVariableBill } from '../types';
-import { formatBRL, formatDateBR } from '../lib/storage';
+import { formatBRL, formatDateBR, getDueDateBusinessInfo, getEffectiveDueDate } from '../lib/storage';
 
 interface BillsModuleProps {
   bills: Bill[];
@@ -82,13 +87,43 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const [viewMonthStr, setViewMonthStr] = useState<string>(currentMonthStr);
 
+  // Generate the upcoming 6 months forward from the current month (e.g. Outubro 2026, Novembro 2026, etc.)
+  const upcomingMonths = React.useMemo(() => {
+    const list: string[] = [];
+    const [currY, currM] = currentMonthStr.split('-').map(Number);
+    for (let i = 1; i <= 6; i++) {
+      const d = new Date(currY, currM - 1 + i, 1);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      list.push(`${y}-${m}`);
+    }
+    return list;
+  }, [currentMonthStr]);
+
   const allMonthsSet = new Set<string>();
   allMonthsSet.add(currentMonthStr);
-  bills.forEach((b) => { if (b.dueDate) allMonthsSet.add(b.dueDate.slice(0, 7)); });
+  upcomingMonths.forEach((m) => allMonthsSet.add(m));
+  bills.forEach((b) => { if (b.dueDate && b.dueDate.length >= 7) allMonthsSet.add(b.dueDate.slice(0, 7)); });
   if (transactions) {
-    transactions.forEach((t) => { if (t.date) allMonthsSet.add(t.date.slice(0, 7)); });
+    transactions.forEach((t) => { if (t.date && t.date.length >= 7) allMonthsSet.add(t.date.slice(0, 7)); });
   }
-  const availableMonths = Array.from(allMonthsSet).sort().reverse();
+  const allRecordedMonths = Array.from(allMonthsSet).sort();
+
+  const handleShiftMonth = (direction: -1 | 1) => {
+    if (viewMonthStr === 'todos') {
+      setViewMonthStr(currentMonthStr);
+      return;
+    }
+    try {
+      const [year, month] = viewMonthStr.split('-').map(Number);
+      const targetDate = new Date(year, month - 1 + direction, 1);
+      const y = targetDate.getFullYear();
+      const m = String(targetDate.getMonth() + 1).padStart(2, '0');
+      setViewMonthStr(`${y}-${m}`);
+    } catch {
+      setViewMonthStr(currentMonthStr);
+    }
+  };
   
   const recurringBills = bills.filter((b) => b.recurring !== 'unico');
   const uniqueMonths: string[] = Array.from(new Set(recurringBills.map((b) => b.dueDate.slice(0, 7)))).sort().reverse() as string[];
@@ -314,7 +349,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
   const sortedItems = [...filteredItems].sort((a, b) => {
     const getStatusPriority = (item: any) => {
       let status = item.status;
-      if (item.isTransaction && status === 'pendente' && item.dueDate < todayStr) {
+      if (item.isTransaction && status === 'pendente' && getEffectiveDueDate(item.dueDate) < todayStr) {
         status = 'atrasado';
       }
       if (status === 'atrasado') return 0;
@@ -411,19 +446,33 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
             <button
               type="button"
               onClick={() => {
-                const count = onSyncMonthlyBills();
+                const targetM = viewMonthStr !== 'todos' ? viewMonthStr : currentMonthStr;
+                const count = onSyncMonthlyBills(targetM);
                 if (count > 0) {
-                  alert(`✅ ${count} conta(s) mensais foram atualizadas/geradas com sucesso para este mês!`);
+                  alert(`✅ ${count} conta(s) mensais foram atualizadas/sincronizadas para ${formatMonthName(targetM)}!`);
                 } else {
-                  alert(`ℹ️ Todas as contas mensais recorrentes já estão atualizadas para este mês.`);
+                  alert(`ℹ️ Todas as contas mensais recorrentes já estão sincronizadas para ${formatMonthName(targetM)}.`);
                 }
               }}
               className="px-4 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold text-xs rounded-2xl transition-all border border-emerald-500/20 flex items-center gap-2 cursor-pointer shadow-[0_0_12px_rgba(16,185,129,0.15)]"
-              title="Gerar / Atualizar Contas Recorrentes para o Mês Atual"
+              title="Gerar / Atualizar Contas Recorrentes para o Mês Selecionado"
             >
               <RefreshCw className="w-4 h-4 stroke-[2.5]" />
               <span className="hidden sm:inline">Atualizar Contas Mensais</span>
               <span className="sm:hidden">Atualizar Mensal</span>
+            </button>
+          )}
+
+          {onDeleteDuplicateBills && (
+            <button
+              type="button"
+              onClick={onDeleteDuplicateBills}
+              className="px-3.5 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold text-xs rounded-2xl transition-all border border-rose-500/20 flex items-center gap-1.5 cursor-pointer"
+              title="Detectar e remover contas duplicadas neste mês ou em outros"
+            >
+              <CopyX className="w-4 h-4 stroke-[2.5]" />
+              <span className="hidden sm:inline">Remover Duplicadas</span>
+              <span className="sm:hidden">Limpar Duplicadas</span>
             </button>
           )}
 
@@ -433,41 +482,101 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
       {isExpanded && (
         <div className="space-y-6 animate-fadeIn">
           {/* Month Selector Bar for Archiving & Viewing Specific Months */}
-          <div className="bg-[#161618] border border-white/5 rounded-3xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <CalendarDays className="w-4 h-4 text-amber-400" />
-              <span className="text-xs font-bold text-white uppercase tracking-wider">Mês Vigente / Arquivo:</span>
+          <div className="bg-[#161618] border border-white/5 rounded-3xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex items-center justify-between sm:justify-start gap-3">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold text-white uppercase tracking-wider">Mês Vigente / Arquivo:</span>
+              </div>
+
+              {/* Stepper Navigator */}
+              <div className="flex items-center gap-1 bg-[#1A1A1C] border border-white/10 rounded-2xl p-0.5">
+                <button
+                  type="button"
+                  onClick={() => handleShiftMonth(-1)}
+                  title="Mês Anterior"
+                  className="p-1.5 hover:bg-white/10 text-white/70 hover:text-white rounded-xl transition cursor-pointer"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="px-2 text-xs font-bold text-amber-400 min-w-[90px] text-center">
+                  {viewMonthStr === 'todos' ? 'Todos' : formatMonthName(viewMonthStr)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleShiftMonth(1)}
+                  title="Próximo Mês"
+                  className="p-1.5 hover:bg-white/10 text-white/70 hover:text-white rounded-xl transition cursor-pointer"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
+
             <div className="flex flex-wrap items-center gap-1.5">
+              {/* Current Month */}
               <button
+                type="button"
                 onClick={() => setViewMonthStr(currentMonthStr)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                   viewMonthStr === currentMonthStr
                     ? 'bg-amber-500 text-slate-950 shadow-md'
-                    : 'bg-[#1A1A1C] hover:bg-white/5 text-white/60 border border-white/5'
+                    : 'bg-[#1A1A1C] hover:bg-white/5 text-white/70 border border-white/5'
                 }`}
               >
                 Mês Atual ({formatMonthName(currentMonthStr)})
               </button>
-              {availableMonths.filter(m => m !== currentMonthStr).slice(0, 6).map((m) => (
+
+              {/* Upcoming Months (Próximos Meses) */}
+              {upcomingMonths.map((m) => (
                 <button
                   key={m}
+                  type="button"
                   onClick={() => setViewMonthStr(m)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-medium transition ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer ${
                     viewMonthStr === m
                       ? 'bg-amber-500 text-slate-950 font-bold shadow-md'
-                      : 'bg-[#1A1A1C] hover:bg-white/5 text-white/60 border border-white/5'
+                      : 'bg-[#1A1A1C] hover:bg-white/5 text-white/70 border border-white/5'
                   }`}
                 >
                   {formatMonthName(m)}
                 </button>
               ))}
+
+              {/* Active custom month if not in current/upcoming and not 'todos' */}
+              {viewMonthStr !== 'todos' && viewMonthStr !== currentMonthStr && !upcomingMonths.includes(viewMonthStr) && (
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 text-slate-950 shadow-md"
+                >
+                  {formatMonthName(viewMonthStr)}
+                </button>
+              )}
+
+              {/* Dropdown for other past/future recorded months */}
+              <select
+                value={allRecordedMonths.includes(viewMonthStr) ? viewMonthStr : ''}
+                onChange={(e) => {
+                  if (e.target.value) setViewMonthStr(e.target.value);
+                }}
+                className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-[#1A1A1C] hover:bg-white/10 text-white/70 border border-white/10 focus:outline-none focus:border-amber-400 cursor-pointer"
+              >
+                <option value="" disabled>Outros Meses...</option>
+                {allRecordedMonths.map((m) => (
+                  <option key={m} value={m} className="bg-[#1A1A1E] text-white">
+                    {formatMonthName(m)} {m === currentMonthStr ? '(Atual)' : ''}
+                  </option>
+                ))}
+              </select>
+
+              {/* View All */}
               <button
+                type="button"
                 onClick={() => setViewMonthStr('todos')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer ${
                   viewMonthStr === 'todos'
                     ? 'bg-amber-500 text-slate-950 font-bold shadow-md'
-                    : 'bg-[#1A1A1C] hover:bg-white/5 text-white/60 border border-white/5'
+                    : 'bg-[#1A1A1C] hover:bg-white/5 text-white/70 border border-white/5'
                 }`}
               >
                 Ver Todos (Arquivos)
@@ -649,7 +758,13 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                       return (
                         <div key={item.id} className="flex flex-col gap-2 relative overflow-hidden rounded-2xl">
                           <div
-                            onClick={() => setDeletingId(item.id)}
+                            onClick={() => {
+                              if (item.isTransaction) {
+                                onEditTransaction && onEditTransaction(item.original as Transaction);
+                              } else {
+                                onEditBill && onEditBill(item.original as Bill);
+                              }
+                            }}
                             className={`p-4 rounded-2xl border transition flex flex-col md:flex-row md:items-center justify-between gap-4 group cursor-pointer ${
                             isPaid
                               ? 'bg-slate-900/60 border-slate-800/80 hover:border-white/20'
@@ -657,7 +772,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                               ? 'bg-rose-950/20 border-rose-500/30 hover:border-rose-400/50'
                               : 'bg-slate-900 border-slate-800 hover:border-amber-500/50'
                           }`}
-                          title="Clique em qualquer lugar para excluir ou gerenciar esta conta"
+                          title="Clique para abrir os dados da conta (código de barras, PIX, valores e vencimento)"
                         >
                           {needsUpdate && (
                             <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center border border-amber-500/30 rounded-2xl">
@@ -758,16 +873,37 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                                 </div>
                               )}
 
-                              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-1.5">
-                                <span>
-                                  {item.isTransaction ? 'Lançamento: ' : 'Vencimento: '}<strong className="text-slate-300">{formatDateBR(item.dueDate)}</strong>
-                                </span>
-                                <span>•</span>
-                                <span className="flex items-center gap-1 bg-slate-800/80 text-slate-300 px-2 py-0.5 rounded text-[11px]">
-                                  <RefreshCw className="w-3 h-3 text-amber-400" />
-                                  {item.recurring || 'Único'}
-                                </span>
-                              </div>
+                              {(() => {
+                                const dueInfo = getDueDateBusinessInfo(item.dueDate);
+                                return (
+                                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1.5">
+                                    <span className="flex items-center gap-1">
+                                      {item.isTransaction ? 'Lançamento: ' : 'Vencimento: '}
+                                      <strong className="text-slate-300">{formatDateBR(item.dueDate)}</strong>
+                                      {dueInfo.isNonBusinessDay && (
+                                        <span className="text-slate-400 font-medium">({dueInfo.originalDayOfWeek.slice(0, 3)})</span>
+                                      )}
+                                    </span>
+                                    {dueInfo.isNonBusinessDay && (
+                                      <span
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-950/70 text-cyan-300 border border-cyan-500/30"
+                                        title={dueInfo.noticeText}
+                                      >
+                                        <CalendarClock className="w-3 h-3 text-cyan-400 shrink-0" />
+                                        <span>
+                                          {dueInfo.holidayName ? `${dueInfo.holidayName.split(' ')[0]} • ` : ''}
+                                          Próx. dia útil: <strong className="text-white font-bold">{dueInfo.formattedEffective.slice(0, 5)} ({dueInfo.effectiveDayOfWeek.slice(0, 3)})</strong>
+                                        </span>
+                                      </span>
+                                    )}
+                                    <span>•</span>
+                                    <span className="flex items-center gap-1 bg-slate-800/80 text-slate-300 px-2 py-0.5 rounded text-[11px]">
+                                      <RefreshCw className="w-3 h-3 text-amber-400" />
+                                      {item.recurring || 'Único'}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
 
@@ -1023,7 +1159,13 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
               return (
                 <div key={item.id} className="flex flex-col gap-2 relative overflow-hidden rounded-2xl">
                   <div
-                    onClick={() => setDeletingId(item.id)}
+                    onClick={() => {
+                      if (item.isTransaction) {
+                        onEditTransaction && onEditTransaction(item.original as Transaction);
+                      } else {
+                        onEditBill && onEditBill(item.original as Bill);
+                      }
+                    }}
                     className={`p-4 rounded-2xl border transition flex flex-col md:flex-row md:items-center justify-between gap-4 group cursor-pointer ${
                     isPaid
                       ? 'bg-slate-900/60 border-slate-800/80 hover:border-white/20'
@@ -1031,7 +1173,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                       ? 'bg-rose-950/20 border-rose-500/30 hover:border-rose-400/50'
                       : 'bg-slate-900 border-slate-800 hover:border-amber-500/50'
                   }`}
-                  title="Clique em qualquer lugar para excluir ou gerenciar esta conta"
+                  title="Clique para abrir os dados da conta (código de barras, PIX, valores e vencimento)"
                 >
                   {needsUpdate && (
                     <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center border border-amber-500/30 rounded-2xl">
@@ -1132,16 +1274,37 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                         </div>
                       )}
 
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-1.5">
-                        <span>
-                          {item.isTransaction ? 'Lançamento: ' : 'Vencimento: '}<strong className="text-slate-300">{formatDateBR(item.dueDate)}</strong>
-                        </span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1 bg-slate-800/80 text-slate-300 px-2 py-0.5 rounded text-[11px]">
-                          <RefreshCw className="w-3 h-3 text-amber-400" />
-                          {item.recurring || 'Único'}
-                        </span>
-                      </div>
+                      {(() => {
+                        const dueInfo = getDueDateBusinessInfo(item.dueDate);
+                        return (
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1.5">
+                            <span className="flex items-center gap-1">
+                              {item.isTransaction ? 'Lançamento: ' : 'Vencimento: '}
+                              <strong className="text-slate-300">{formatDateBR(item.dueDate)}</strong>
+                              {dueInfo.isNonBusinessDay && (
+                                <span className="text-slate-400 font-medium">({dueInfo.originalDayOfWeek.slice(0, 3)})</span>
+                              )}
+                            </span>
+                            {dueInfo.isNonBusinessDay && (
+                              <span
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-950/70 text-cyan-300 border border-cyan-500/30"
+                                title={dueInfo.noticeText}
+                              >
+                                <CalendarClock className="w-3 h-3 text-cyan-400 shrink-0" />
+                                <span>
+                                  {dueInfo.holidayName ? `${dueInfo.holidayName.split(' ')[0]} • ` : ''}
+                                  Próx. dia útil: <strong className="text-white font-bold">{dueInfo.formattedEffective.slice(0, 5)} ({dueInfo.effectiveDayOfWeek.slice(0, 3)})</strong>
+                                </span>
+                              </span>
+                            )}
+                            <span>•</span>
+                            <span className="flex items-center gap-1 bg-slate-800/80 text-slate-300 px-2 py-0.5 rounded text-[11px]">
+                              <RefreshCw className="w-3 h-3 text-amber-400" />
+                              {item.recurring || 'Único'}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 

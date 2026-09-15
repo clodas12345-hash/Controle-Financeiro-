@@ -14,9 +14,10 @@ import {
   Building,
   Pencil,
   Trash2,
+  CalendarClock,
 } from 'lucide-react';
 import { Bill, Transaction, CategoryScope } from '../types';
-import { formatBRL, formatDateBR, getTodayStr } from '../lib/storage';
+import { formatBRL, formatDateBR, getTodayStr, getDueDateBusinessInfo, getEffectiveDueDate } from '../lib/storage';
 
 interface BillsCalendarProps {
   bills: Bill[];
@@ -187,10 +188,10 @@ export const BillsCalendar: React.FC<BillsCalendarProps> = ({
     const dayItems = itemsByDate[dateStr];
     if (!dayItems || dayItems.length === 0) return null;
 
-    const hasRed = dayItems.some((item) => !item.isPaid && item.dueDate <= todayStr);
+    const hasRed = dayItems.some((item) => !item.isPaid && getEffectiveDueDate(item.dueDate) <= todayStr);
     if (hasRed) return 'red';
 
-    const hasOrange = dayItems.some((item) => !item.isPaid && item.dueDate > todayStr);
+    const hasOrange = dayItems.some((item) => !item.isPaid && getEffectiveDueDate(item.dueDate) > todayStr);
     if (hasOrange) return 'orange';
 
     return 'green';
@@ -496,6 +497,22 @@ export const BillsCalendar: React.FC<BillsCalendarProps> = ({
                 Dia {selectedDateStr.split('-')[2]} ({selectedDayItems.length})
               </button>
             </div>
+
+            {viewFilterMode === 'day' && (() => {
+              const dayBusinessInfo = getDueDateBusinessInfo(selectedDateStr);
+              if (dayBusinessInfo.isNonBusinessDay) {
+                return (
+                  <div className="mt-2.5 p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-cyan-200 text-xs flex items-center gap-2 animate-fadeIn">
+                    <CalendarClock className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span className="text-[11px] leading-relaxed">
+                      {dayBusinessInfo.holidayName ? `${dayBusinessInfo.holidayName} • ` : `${dayBusinessInfo.originalDayOfWeek} • `}
+                      Vencimentos deste dia são válidos para pagamento no próximo dia útil: <strong className="text-white font-bold">{dayBusinessInfo.formattedEffective} ({dayBusinessInfo.effectiveDayOfWeek})</strong> sem encargos.
+                    </span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -550,8 +567,10 @@ export const BillsCalendar: React.FC<BillsCalendarProps> = ({
         ) : (
           <div className="space-y-2.5">
             {displayedItems.map((item) => {
-              const isOverdue = !item.isPaid && item.dueDate < todayStr;
-              const isDueToday = !item.isPaid && item.dueDate === todayStr;
+              const dueInfo = getDueDateBusinessInfo(item.dueDate);
+              const effectiveDueDate = dueInfo.effectiveDueDate;
+              const isOverdue = !item.isPaid && effectiveDueDate < todayStr;
+              const isDueToday = !item.isPaid && effectiveDueDate === todayStr;
 
               return (
                 <div
@@ -599,13 +618,28 @@ export const BillsCalendar: React.FC<BillsCalendarProps> = ({
                             : isOverdue
                             ? 'Atrasado'
                             : isDueToday
-                            ? 'Vence Hoje'
+                            ? (dueInfo.isNonBusinessDay ? 'Vence Hoje (Próx. Útil)' : 'Vence Hoje')
                             : 'A Pagar'}
                         </span>
                       </div>
 
-                      <div className="text-xs text-slate-400 mt-1 flex flex-wrap items-center gap-3">
-                        <span>Vencimento: {formatDateBR(item.dueDate)}</span>
+                      <div className="text-xs text-slate-400 mt-1 flex flex-wrap items-center gap-2">
+                        <span>
+                          Vencimento: <strong className="text-slate-300">{formatDateBR(item.dueDate)}</strong>
+                          {dueInfo.isNonBusinessDay && ` (${dueInfo.originalDayOfWeek.slice(0, 3)})`}
+                        </span>
+                        {dueInfo.isNonBusinessDay && (
+                          <span
+                            className="inline-flex items-center gap-1 bg-cyan-950/70 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                            title={dueInfo.noticeText}
+                          >
+                            <CalendarClock className="w-3 h-3 text-cyan-400 shrink-0" />
+                            <span>
+                              {dueInfo.holidayName ? `${dueInfo.holidayName.split(' ')[0]} • ` : ''}
+                              Próx. dia útil: <strong className="text-white font-bold">{dueInfo.formattedEffective.slice(0, 5)} ({dueInfo.effectiveDayOfWeek.slice(0, 3)})</strong>
+                            </span>
+                          </span>
+                        )}
                         <span>• Escopo: <strong className="capitalize text-slate-300">{item.scope}</strong></span>
                       </div>
 

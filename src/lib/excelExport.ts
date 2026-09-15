@@ -193,51 +193,42 @@ export function exportAppToExcel(appData?: ReturnType<typeof loadAllAppData>) {
   const dateStr = new Date().toISOString().slice(0, 10);
   const fileName = `Controle_Financeiro_Planilha_${dateStr}.xlsx`;
 
-  // Write workbook to binary array
+  // Prepare binary representations
   try {
-    
+    const base64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
     if (Capacitor.isNativePlatform()) {
-      const base64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
-      
       const saveAndShare = async () => {
         try {
-          // Request permissions first
-          const permStatus = await Filesystem.checkPermissions();
-          if (permStatus.publicStorage !== 'granted') {
-            await Filesystem.requestPermissions();
-          }
-
-          // Save to public Downloads folder
+          // Directory.Cache does NOT require dangerous public storage permissions in Android 10/11/12/13/14+
           const result = await Filesystem.writeFile({
-            path: 'Download/' + fileName,
+            path: fileName,
             data: base64,
-            directory: Directory.ExternalStorage
+            directory: Directory.Cache,
           });
-          
-          alert('Planilha salva com sucesso na pasta DOWNLOADS do seu celular!');
-          
-          // Still offer to share to WhatsApp
+
+          // Open native Android Share sheet - allows user to save to device/downloads, Drive, WhatsApp, etc.
           await Share.share({
             title: 'Planilha Controle Financeiro',
             text: `Planilha financeira gerada em ${new Date().toLocaleDateString('pt-BR')}`,
             url: result.uri,
-            dialogTitle: 'Compartilhar Planilha'
+            dialogTitle: 'Salvar ou Compartilhar Planilha',
           });
-        } catch (err) {
-          console.warn('Native share/write failed:', err);
-          alert('Erro ao salvar no celular. Tente verificar as permissões.');
+        } catch (err: any) {
+          console.warn('Native Filesystem/Share notice:', err);
+          // If native share or write fails, smoothly fall back to web download without blocking the user
+          downloadBlob(blob, fileName, base64);
         }
       };
       saveAndShare();
       return;
     }
 
-    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([excelBuffer], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-
-    // 1. Try Web Share API (native share on Android/iOS to WhatsApp, Drive, Excel)
+    // 1. Try Web Share API (native share on Android/iOS browsers to WhatsApp, Drive, Excel)
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       const file = new File([blob], fileName, {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -250,9 +241,9 @@ export function exportAppToExcel(appData?: ReturnType<typeof loadAllAppData>) {
             files: [file],
           })
           .catch((err) => {
-            if (err.name !== 'AbortError') {
+            if (err?.name !== 'AbortError') {
               console.warn('Share excel failed, falling back to download:', err);
-              downloadBlob(blob, fileName);
+              downloadBlob(blob, fileName, base64);
             }
           });
         return;
@@ -260,14 +251,18 @@ export function exportAppToExcel(appData?: ReturnType<typeof loadAllAppData>) {
     }
 
     // 2. Browser download fallback
-    downloadBlob(blob, fileName);
+    downloadBlob(blob, fileName, base64);
   } catch (err) {
     console.warn('XLSX custom write error, falling back to writeFile:', err);
-    XLSX.writeFile(wb, fileName);
+    try {
+      XLSX.writeFile(wb, fileName);
+    } catch (fallbackErr) {
+      console.error('XLSX writeFile failed:', fallbackErr);
+    }
   }
 }
 
-function downloadBlob(blob: Blob, fileName: string) {
+function downloadBlob(blob: Blob, fileName: string, base64Data?: string) {
   try {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -283,6 +278,23 @@ function downloadBlob(blob: Blob, fileName: string) {
       URL.revokeObjectURL(url);
     }, 1500);
   } catch (e) {
-    console.error('Download blob error:', e);
+    console.warn('Download blob error, trying data URI:', e);
+    if (base64Data) {
+      try {
+        const link = document.createElement('a');
+        link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64Data}`;
+        link.download = fileName;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          if (document.body.contains(link)) {
+            document.body.removeChild(link);
+          }
+        }, 1500);
+      } catch (e2) {
+        console.error('Base64 download error:', e2);
+      }
+    }
   }
 }

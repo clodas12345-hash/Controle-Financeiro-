@@ -319,3 +319,21 @@ export function getIncomeProfile(): IncomeProfile {
 export function setIncomeProfile(profile: IncomeProfile): void {
   localStorage.setItem(KEYS.INCOME_PROFILE, profile);
 }
+
+export function getBaseBillTitle(title: string): string {
+  if (!title) return '';
+  return title
+    .replace(/\s*\(\s*\d+\s*\/\s*\d+\s*\)/gi, '')
+    .replace(/\s*-\s*parcela\s*\d+\s*\/\s*\d+/gi, '')
+    .replace(/\s*parcela\s*\d+\s*\/\s*\d+/gi, '')
+    .replace(/\s*\d+\s*\/\s*\d+\s*$/gi, '')
+    .trim();
+}
+
+export {
+  getDueDateBusinessInfo,
+  getEffectiveDueDate,
+  isBusinessDay,
+  getBrazilianHolidays,
+} from './businessDays';
+export type { DueDateBusinessInfo } from './businessDays';

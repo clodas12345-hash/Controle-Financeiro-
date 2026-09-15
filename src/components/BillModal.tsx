@@ -20,21 +20,26 @@ import {
   Layers,
   Pin,
   CheckCircle2,
-  Calendar
+  Calendar,
+  CalendarClock,
+  QrCode,
+  Copy
 } from 'lucide-react';
 import { Bill, TransactionCategory, CategoryScope, PaymentMethod, SCOPE_CATEGORIES } from '../types';
-import { getTodayStr, addMonthsToDateString, formatBRL } from '../lib/storage';
+import { getTodayStr, addMonthsToDateString, formatBRL, getBaseBillTitle, getDueDateBusinessInfo } from '../lib/storage';
 
 interface BillModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (
-    bill: (Omit<Bill, 'id' | 'status'> & { paid?: boolean }) | (Omit<Bill, 'id' | 'status'> & { paid?: boolean })[],
+    bill: (Omit<Bill, 'id' | 'status'> & { id?: string; paid?: boolean }) | (Omit<Bill, 'id' | 'status'> & { id?: string; paid?: boolean })[],
     existingId?: string
   ) => void;
   onDelete?: (id: string) => void;
+  onDeleteMultiple?: (ids: string[]) => void;
   editingBill?: Bill | null;
   defaultScope?: CategoryScope;
+  existingBills?: Bill[];
 }
 
 const COMMON_PRESETS = [
@@ -51,13 +56,16 @@ export const BillModal: React.FC<BillModalProps> = ({
   onClose,
   onSave,
   onDelete,
+  onDeleteMultiple,
   editingBill = null,
   defaultScope = 'casa',
+  existingBills = [],
 }) => {
   // Form State
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState<number | ''>('');
   const [dueDate, setDueDate] = useState(getTodayStr());
+  const dueBusinessInfo = React.useMemo(() => getDueDateBusinessInfo(dueDate), [dueDate]);
   const [scope, setScope] = useState<CategoryScope>(defaultScope);
   const [category, setCategory] = useState<TransactionCategory>('Moradia');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
@@ -69,6 +77,7 @@ export const BillModal: React.FC<BillModalProps> = ({
   const [bankModalItem, setBankModalItem] = useState<{ isOpen: boolean, isPix: boolean }>({ isOpen: false, isPix: false });
   const [pixCode, setPixCode] = useState("");
   const [showBarcode, setShowBarcode] = useState(false);
+  const [copiedField, setCopiedField] = useState<'barcode' | 'pix' | null>(null);
 
   // Bill Type / Mode: 'fixa' (Monthly across all months), 'parcelada' (Installments), 'unica' (One-off)
   const [billType, setBillType] = useState<'fixa' | 'parcelada' | 'unica'>('fixa');
@@ -80,6 +89,19 @@ export const BillModal: React.FC<BillModalProps> = ({
   const [installmentAmountType, setInstallmentAmountType] = useState<'por_parcela' | 'valor_total'>('por_parcela');
   const [markPriorAsPaid, setMarkPriorAsPaid] = useState(true);
   const [includeInCarDaily, setIncludeInCarDaily] = useState(false);
+
+  // Bulk / Multiple bills synchronization scope ('all' | 'future' | 'single')
+  const [updateScope, setUpdateScope] = useState<'all' | 'future' | 'single'>('all');
+
+  const baseTitle = editingBill ? getBaseBillTitle(editingBill.title) : '';
+  const matchingBills = React.useMemo(() => {
+    if (!editingBill || !existingBills || existingBills.length === 0) return [];
+    const base = getBaseBillTitle(editingBill.title).toLowerCase().trim();
+    if (!base) return [];
+    return existingBills
+      .filter((b) => getBaseBillTitle(b.title).toLowerCase().trim() === base)
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  }, [editingBill, existingBills]);
 
   // UI state
   const [customCategories, setCustomCategories] = useState<string[]>([]);
@@ -139,13 +161,18 @@ export const BillModal: React.FC<BillModalProps> = ({
       setBarcode(editingBill.barcode || "");
       setPixCode(editingBill.pixCode || "");
       setIsPaid(editingBill.status === 'pago');
+      setShowBarcode(true); // Always display barcode & PIX data immediately when opening bill details!
       
-      if (editingBill.installment || (editingBill.title && /\(\d+\/\d+\)/.test(editingBill.title))) {
+      const installmentMatch = editingBill.title ? editingBill.title.match(/\((\d+)\/(\d+)\)/) : null;
+      if (editingBill.installment || installmentMatch) {
         setBillType('parcelada');
         setPaymentMode('parcelado');
         setHasInstallment(true);
-        setInstallmentCurrent(editingBill.installment?.current ?? 1);
-        setInstallmentTotal(editingBill.installment?.total ?? 12);
+        const currVal = editingBill.installment?.current ?? (installmentMatch ? parseInt(installmentMatch[1], 10) : 1);
+        const totVal = editingBill.installment?.total ?? (installmentMatch ? parseInt(installmentMatch[2], 10) : 12);
+        setInstallmentCurrent(currVal);
+        setInstallmentTotal(totVal);
+        setInstallments(totVal);
       } else if (editingBill.recurring === 'mensal') {
         setBillType('fixa');
         setPaymentMode('a_vista');
@@ -157,6 +184,7 @@ export const BillModal: React.FC<BillModalProps> = ({
       }
       setInstallments(2);
       setIncludeInCarDaily(!!editingBill.includeInCarDaily);
+      setUpdateScope('all');
     } else {
       setTitle('');
       setAmount('');
@@ -178,6 +206,7 @@ export const BillModal: React.FC<BillModalProps> = ({
       setInstallmentCurrent(1);
       setInstallmentTotal(12);
       setIncludeInCarDaily(false);
+      setUpdateScope('all');
     }
     setConfirmDelete(false);
     setIsAddingNewCat(false);
@@ -428,6 +457,142 @@ export const BillModal: React.FC<BillModalProps> = ({
       }
 
       onSave(billsBatch);
+    } else if (editingBill) {
+      const isParcelada = billType === 'parcelada' || hasInstallment;
+
+      if (isParcelada) {
+        // User is editing or converting into installments!
+        // "ex as q lancei sem parcelas e depois corrigi"
+        const curr = Math.max(1, Number(installmentCurrent) || 1);
+        const total = Math.max(curr, Number(installmentTotal) || Number(installments) || 2);
+        const cleanBaseTitle = getBaseBillTitle(title.trim()) || getBaseBillTitle(editingBill.title) || title.trim();
+        const eachInstallmentAmount = installmentAmountType === 'valor_total'
+          ? Number((numericAmount / total).toFixed(2))
+          : numericAmount;
+
+        const targetMatching = updateScope === 'future'
+          ? matchingBills.filter((b) => b.dueDate >= editingBill.dueDate)
+          : matchingBills;
+
+        const billsBatch: (Omit<Bill, 'id' | 'status'> & { id?: string; paid?: boolean })[] = [];
+
+        for (let i = 1; i <= total; i++) {
+          const monthOffset = i - curr;
+          const currentDueDate = addMonthsToDateString(dueDate, monthOffset);
+          const currentTitle = `${cleanBaseTitle} (${i}/${total})`;
+
+          const existingMatchingBill = targetMatching[i - 1];
+
+          let installmentPaid = false;
+          let billBarcode: string | undefined = undefined;
+          let billPixCode: string | undefined = undefined;
+
+          if (existingMatchingBill) {
+            if (existingMatchingBill.id === editingBill.id) {
+              installmentPaid = isPaid;
+              billBarcode = barcode || undefined;
+              billPixCode = pixCode || undefined;
+            } else {
+              installmentPaid = existingMatchingBill.status === 'pago' ? true : (i < curr ? markPriorAsPaid : false);
+              billBarcode = existingMatchingBill.barcode || undefined;
+              billPixCode = existingMatchingBill.pixCode || undefined;
+            }
+          } else {
+            installmentPaid = i < curr ? markPriorAsPaid : (i === curr ? isPaid : false);
+            billBarcode = i === curr ? (barcode || undefined) : undefined;
+            billPixCode = i === curr ? (pixCode || undefined) : undefined;
+          }
+
+          billsBatch.push({
+            id: existingMatchingBill ? existingMatchingBill.id : undefined,
+            title: currentTitle,
+            amount: eachInstallmentAmount,
+            dueDate: currentDueDate,
+            category,
+            scope,
+            paymentMethod,
+            recurring: 'unico',
+            recipient: recipient.trim() || undefined,
+            notes: notes.trim() || undefined,
+            paid: installmentPaid,
+            barcode: billBarcode,
+            pixCode: billPixCode,
+            installment: { current: i, total: total },
+          });
+        }
+
+        // If there were more matching bills than total installments, and user chose 'all',
+        // remove the extra ones to keep total count accurate
+        if (targetMatching.length > total && onDeleteMultiple && updateScope === 'all') {
+          const extraIds = targetMatching.slice(total).map((b) => b.id);
+          onDeleteMultiple(extraIds);
+        }
+
+        onSave(billsBatch);
+      } else if (matchingBills.length > 1 && (updateScope === 'all' || updateScope === 'future')) {
+        // User is editing identical recurring bills (e.g. Luz, Internet, etc.)
+        const targetBills = updateScope === 'future'
+          ? matchingBills.filter((b) => b.dueDate >= editingBill.dueDate)
+          : matchingBills;
+
+        const [, , newDay] = dueDate.split('-');
+        const billsBatch: (Omit<Bill, 'id' | 'status'> & { id?: string; paid?: boolean })[] = [];
+
+        for (const b of targetBills) {
+          let targetDueDate = b.dueDate;
+          const [bYear, bMonth] = b.dueDate.split('-');
+          if (bYear && bMonth && newDay) {
+            const maxD = new Date(Number(bYear), Number(bMonth), 0).getDate();
+            const adjustedDay = Math.min(Number(newDay), maxD);
+            targetDueDate = `${bYear}-${bMonth}-${String(adjustedDay).padStart(2, '0')}`;
+          }
+
+          const isThisBill = b.id === editingBill.id;
+          if (isThisBill) {
+            targetDueDate = dueDate;
+          }
+
+          billsBatch.push({
+            id: b.id,
+            title: title.trim(),
+            amount: numericAmount,
+            dueDate: targetDueDate,
+            category,
+            scope,
+            paymentMethod,
+            recurring: billType === 'fixa' ? 'mensal' : (b.recurring || recurring),
+            recipient: recipient.trim() || undefined,
+            notes: notes.trim() || undefined,
+            paid: isThisBill ? isPaid : (b.status === 'pago'),
+            barcode: isThisBill ? (barcode || undefined) : (b.barcode || undefined),
+            pixCode: isThisBill ? (pixCode || undefined) : (b.pixCode || undefined),
+            installment: undefined,
+          });
+        }
+
+        onSave(billsBatch);
+      } else {
+        // Single bill update
+        onSave(
+          {
+            id: editingBill.id,
+            title: title.trim(),
+            amount: numericAmount,
+            dueDate,
+            category,
+            scope,
+            paymentMethod,
+            recurring: billType === 'fixa' ? 'mensal' : (billType === 'parcelada' ? 'unico' : recurring),
+            recipient: recipient.trim() || undefined,
+            notes: notes.trim() || undefined,
+            paid: isPaid,
+            barcode: barcode || undefined,
+            pixCode: pixCode || undefined,
+            installment: undefined,
+          },
+          editingBill.id
+        );
+      }
     } else {
       const isParcelada = billType === 'parcelada' || hasInstallment;
       onSave(
@@ -547,74 +712,143 @@ export const BillModal: React.FC<BillModalProps> = ({
 
             {/* Title / Description */}
             {/* Barcode / Pix Section */}
-            <div>
+            <div className="rounded-2xl border border-white/10 bg-[#161618] overflow-hidden">
               <button
                 type="button"
                 onClick={() => setShowBarcode(!showBarcode)}
-                className="w-full flex items-center justify-between px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-xs font-semibold text-white/80 transition"
+                className="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 text-xs font-bold text-white transition cursor-pointer"
               >
-                <span>Dados do Boleto / Pagamento</span>
-                <span>{showBarcode ? 'Ocultar' : 'Exibir'}</span>
+                <div className="flex items-center gap-2">
+                  <QrCode className="w-4 h-4 text-amber-400" />
+                  <span>Dados para Pagamento (Código de Barras & PIX)</span>
+                  {(barcode || pixCode) && (
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                      Disponível
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-white/60">
+                  <span>{showBarcode ? 'Ocultar' : 'Exibir'}</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showBarcode ? 'rotate-180' : ''}`} />
+                </div>
               </button>
+
               {showBarcode && (
-                <div className="mt-2 p-3 bg-[#1A1A1E] border border-white/10 rounded-2xl space-y-3">
+                <div className="p-4 bg-[#1A1A1E] space-y-3.5 border-t border-white/5">
+                  {/* Linha Digitavel / Boleto */}
                   <div>
-                    <label className="block text-[11px] font-medium text-white/50 mb-1">Linha Digitável / Código de Barras</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-white/70">
+                        Linha Digitável / Código de Barras
+                      </label>
+                      {barcode && (
+                        <span className="text-[10px] text-amber-400">
+                          {barcode.replace(/\D/g, '').length} dígitos
+                        </span>
+                      )}
+                    </div>
                     <div className="flex gap-2">
                       <input 
                         type="text" 
                         value={barcode} 
                         onChange={e => setBarcode(e.target.value)}
-                        placeholder="Nenhum código extraído"
-                        className="flex-1 bg-black/20 border border-white/5 rounded-xl px-3 py-2 text-xs text-white/70 focus:outline-none focus:border-amber-400"
+                        placeholder="Cole ou digite o código de barras ou use a câmera"
+                        className="flex-1 bg-black/30 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-white/25 focus:outline-none"
                       />
                       <button 
                         type="button"
                         onClick={() => {
                           if (barcode) {
                             navigator.clipboard.writeText(barcode).then(() => {
+                              setCopiedField('barcode');
+                              setTimeout(() => setCopiedField(null), 3000);
                               setBankModalItem({ isOpen: true, isPix: false });
                             });
                           } else {
-                            if (window.confirm("Nenhum código de barras disponível. Deseja abrir a câmera e capturar os dados do boleto?")) {
+                            if (window.confirm("Nenhum código de barras disponível. Deseja abrir a câmera para capturar os dados do boleto?")) {
                                if (fileInputRef.current) fileInputRef.current.click();
                             }
                           }
                         }}
-                        className="px-3 bg-white/10 hover:bg-white/20 rounded-xl text-xs text-white transition"
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                          copiedField === 'barcode'
+                            ? 'bg-emerald-500 text-slate-950 shadow-md'
+                            : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30'
+                        }`}
                       >
-                        Copiar
+                        {copiedField === 'barcode' ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copiar</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
+
+                  {/* PIX Copia e Cola */}
                   <div>
-                    <label className="block text-[11px] font-medium text-white/50 mb-1">Código PIX (Copia e Cola)</label>
+                    <label className="block text-[11px] font-semibold text-white/70 mb-1">
+                      Código PIX (Copia e Cola)
+                    </label>
                     <div className="flex gap-2">
                       <input 
                         type="text" 
                         value={pixCode} 
                         onChange={e => setPixCode(e.target.value)}
-                        placeholder="Nenhum PIX extraído"
-                        className="flex-1 bg-black/20 border border-white/5 rounded-xl px-3 py-2 text-xs text-white/70 focus:outline-none focus:border-amber-400"
+                        placeholder="Cole o código PIX Copia e Cola ou use a câmera"
+                        className="flex-1 bg-black/30 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-white/25 focus:outline-none"
                       />
                       <button 
                         type="button"
                         onClick={() => {
                           if (pixCode) {
                             navigator.clipboard.writeText(pixCode).then(() => {
+                              setCopiedField('pix');
+                              setTimeout(() => setCopiedField(null), 3000);
                               setBankModalItem({ isOpen: true, isPix: true });
                             });
                           } else {
-                            if (window.confirm("Nenhum PIX disponível. Deseja abrir a câmera e capturar os dados?")) {
+                            if (window.confirm("Nenhum código PIX disponível. Deseja abrir a câmera para capturar os dados?")) {
                                if (fileInputRef.current) fileInputRef.current.click();
                             }
                           }
                         }}
-                        className="px-3 bg-white/10 hover:bg-white/20 rounded-xl text-xs text-white transition"
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                          copiedField === 'pix'
+                            ? 'bg-emerald-500 text-slate-950 shadow-md'
+                            : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30'
+                        }`}
                       >
-                        Copiar
+                        {copiedField === 'pix' ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copiar</span>
+                          </>
+                        )}
                       </button>
                     </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 text-[11px] text-white/50">
+                    <span>Dica: Clique em <strong>Copiar</strong> para copiar e abrir seu banco.</span>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-amber-400 hover:text-amber-300 underline font-semibold cursor-pointer"
+                    >
+                      Escanear com Câmera
+                    </button>
                   </div>
                 </div>
               )}
@@ -658,6 +892,66 @@ export const BillModal: React.FC<BillModalProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Mass Update Selector for recurring/matching bills */}
+            {editingBill && matchingBills.length > 1 && (
+              <div className="p-3.5 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-purple-500/10 border border-amber-500/30 rounded-2xl space-y-2.5 animate-fadeIn">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
+                    <Repeat className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Existem {matchingBills.length} contas com este título ("{baseTitle}")</span>
+                  </div>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-lg border border-amber-500/40 font-bold whitespace-nowrap">
+                    Alteração em Lote
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-white/70 leading-tight">
+                  Ao salvar as alterações, onde você deseja aplicar?
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setUpdateScope('all')}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-0.5 ${
+                      updateScope === 'all'
+                        ? 'bg-amber-500 text-slate-950 font-extrabold border-amber-400 shadow-md'
+                        : 'bg-[#141416] text-white/70 border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">Todas as {matchingBills.length} Contas</span>
+                    <span className="text-[9px] opacity-80 leading-tight">Mudar todas as iguais</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUpdateScope('future')}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-0.5 ${
+                      updateScope === 'future'
+                        ? 'bg-amber-500 text-slate-950 font-extrabold border-amber-400 shadow-md'
+                        : 'bg-[#141416] text-white/70 border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">Esta e as Próximas</span>
+                    <span className="text-[9px] opacity-80 leading-tight">A partir deste mês</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUpdateScope('single')}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-0.5 ${
+                      updateScope === 'single'
+                        ? 'bg-amber-500 text-slate-950 font-extrabold border-amber-400 shadow-md'
+                        : 'bg-[#141416] text-white/70 border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">Apenas Esta Conta</span>
+                    <span className="text-[9px] opacity-80 leading-tight">Somente este registro</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Observação / O que se refere */}
             <div>
@@ -710,6 +1004,26 @@ export const BillModal: React.FC<BillModalProps> = ({
                 />
               </div>
             </div>
+
+            {/* Aviso de Vencimento em Fim de Semana ou Feriado */}
+            {dueBusinessInfo.isNonBusinessDay && (
+              <div className="p-3 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 text-cyan-200 text-xs flex items-start gap-2.5 animate-fadeIn">
+                <CalendarClock className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-bold text-white flex items-center gap-2">
+                    <span>Vencimento em {dueBusinessInfo.originalDayOfWeek}</span>
+                    {dueBusinessInfo.holidayName && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                        {dueBusinessInfo.holidayName}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-cyan-200/90 leading-relaxed text-[11px]">
+                    {dueBusinessInfo.noticeText}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Scope & Category */}
             <div className="grid grid-cols-2 gap-3">
@@ -1001,7 +1315,7 @@ export const BillModal: React.FC<BillModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Retroactive Info when starting at a higher installment */}
+                  {/* Retroactive Info or Editing Info when starting at a higher installment or editing */}
                   {Number(installmentCurrent) > 1 && !editingBill && (
                     <div className="p-2.5 bg-purple-950/60 border border-purple-400/40 rounded-xl space-y-2 text-[11px] text-purple-200">
                       <div className="flex items-start gap-2">
@@ -1019,6 +1333,28 @@ export const BillModal: React.FC<BillModalProps> = ({
                         />
                         <span>Marcar parcelas anteriores (01 a {String(Number(installmentCurrent) - 1).padStart(2, '0')}) como Pagas</span>
                       </label>
+                    </div>
+                  )}
+
+                  {editingBill && (
+                    <div className="p-3 bg-purple-950/60 border border-purple-400/40 rounded-xl space-y-2 text-[11px] text-purple-200">
+                      <div className="flex items-start gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                        <div>
+                          <strong>Sincronização de Parcelas:</strong> Ao salvar, o sistema atualizará esta conta e sincronizará as <strong>{installmentTotal || 12} parcelas</strong> ({installmentCurrent || 1}/{installmentTotal || 12} até {installmentTotal || 12}/{installmentTotal || 12}) sequencialmente nos meses correspondentes.
+                        </div>
+                      </div>
+                      {Number(installmentCurrent) > 1 && (
+                        <label className="flex items-center gap-2 cursor-pointer pt-1.5 border-t border-purple-500/20 text-xs font-semibold text-purple-100 select-none">
+                          <input
+                            type="checkbox"
+                            checked={markPriorAsPaid}
+                            onChange={(e) => setMarkPriorAsPaid(e.target.checked)}
+                            className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 bg-slate-900 border-white/20 accent-purple-500 cursor-pointer"
+                          />
+                          <span>Marcar parcelas anteriores (01 a {String(Number(installmentCurrent) - 1).padStart(2, '0')}) como Pagas</span>
+                        </label>
+                      )}
                     </div>
                   )}
 
@@ -1104,51 +1440,6 @@ export const BillModal: React.FC<BillModalProps> = ({
               </label>
             </div>
 
-            {/* Installment options when editing */}
-            {editingBill && (
-              <div className="p-3.5 bg-[#1A1A1E] border border-white/5 rounded-2xl space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-xs font-bold text-white">Identificar Parcela?</div>
-                    <div className="text-[10px] text-white/50 mt-0.5">Defina a parcela desta conta (ex: 01 de 10).</div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                    <input
-                      type="checkbox"
-                      checked={hasInstallment}
-                      onChange={(e) => setHasInstallment(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-10 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500 peer-checked:after:bg-slate-950 peer-checked:after:border-slate-950"></div>
-                  </label>
-                </div>
-
-                {hasInstallment && (
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5 animate-fadeIn">
-                    <div>
-                      <label className="block text-[10px] text-white/70 mb-1">Parcela Atual</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={installmentCurrent}
-                        onChange={(e) => setInstallmentCurrent(e.target.value === '' ? '' : Number(e.target.value))}
-                        className="w-full bg-[#141416] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white text-center font-bold focus:outline-none focus:border-amber-400"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-white/70 mb-1">Total de Parcelas</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={installmentTotal}
-                        onChange={(e) => setInstallmentTotal(e.target.value === '' ? '' : Number(e.target.value))}
-                        className="w-full bg-[#141416] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white text-center font-bold focus:outline-none focus:border-amber-400"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Footer Actions */}
@@ -1156,24 +1447,36 @@ export const BillModal: React.FC<BillModalProps> = ({
             <div>
               {editingBill && onDelete && (
                 confirmDelete ? (
-                  <div className="flex items-center gap-2 animate-fadeIn">
-                    <span className="text-xs text-rose-400 font-bold">Confirma?</span>
+                  <div className="flex flex-wrap items-center gap-1.5 animate-fadeIn">
+                    <span className="text-xs text-rose-400 font-bold mr-1">Excluir:</span>
                     <button
                       type="button"
                       onClick={() => {
                         onDelete(editingBill.id);
                         onClose();
                       }}
-                      className="px-3 py-1 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-xl transition"
+                      className="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white text-xs font-bold rounded-xl border border-rose-500/30 transition cursor-pointer"
                     >
-                      Sim, Excluir
+                      Apenas Esta
                     </button>
+                    {matchingBills.length > 1 && onDeleteMultiple && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onDeleteMultiple(matchingBills.map((b) => b.id));
+                          onClose();
+                        }}
+                        className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white text-xs font-extrabold rounded-xl transition shadow-md cursor-pointer"
+                      >
+                        Todas as {matchingBills.length} Iguais
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setConfirmDelete(false)}
-                      className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition"
+                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition cursor-pointer"
                     >
-                      Não
+                      Cancelar
                     </button>
                   </div>
                 ) : (

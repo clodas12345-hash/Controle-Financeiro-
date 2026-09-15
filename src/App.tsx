@@ -19,6 +19,7 @@ import {
   calculateCurrentInstallment,
   getTodayStr,
   formatBRL,
+  getEffectiveDueDate,
 } from './lib/storage';
 import { exportAppToExcel } from './lib/excelExport';
 import { downloadFullBackupImmediately, restoreFullBackupFromJSON, saveAutomaticRestorePoint } from './lib/backupManager';
@@ -530,7 +531,7 @@ export default function App() {
 
   // Handler: Add or Edit Bill (Single or Batch)
   const handleSaveBill = (
-    billData: (Omit<Bill, 'id' | 'status'> & { paid?: boolean }) | (Omit<Bill, 'id' | 'status'> & { paid?: boolean })[],
+    billData: (Omit<Bill, 'id' | 'status'> & { id?: string; paid?: boolean }) | (Omit<Bill, 'id' | 'status'> & { id?: string; paid?: boolean })[],
     existingId?: string
   ) => {
     const today = getTodayStr();
@@ -543,71 +544,40 @@ export default function App() {
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         const { paid, ...restBillData } = item;
+        const targetId = item.id || (items.length === 1 ? existingId : undefined);
 
-        if (existingId && items.length === 1) {
-          currentBills = currentBills.map((b) =>
-            b.id === existingId
-              ? {
-                  ...b,
-                  ...restBillData,
-                  id: existingId,
-                  status: paid ? 'pago' : 'pendente',
-                  paidDate: paid ? (b.paidDate || today) : undefined,
-                }
-              : b
-          );
-
-          const autoTxId = `tx_auto_bill_${existingId}`;
-          const txIndex = currentTransactions.findIndex((t) => t.id === autoTxId);
-
-          if (txIndex >= 0) {
-            if (paid) {
-              const targetScope = getValidScope(restBillData.scope, restBillData.category, restBillData.title);
-              currentTransactions[txIndex] = {
-                ...currentTransactions[txIndex],
-                description: restBillData.title,
-                amount: restBillData.amount,
-                category: restBillData.category,
-                scope: targetScope,
-                paymentMethod: restBillData.paymentMethod,
-                excludeFromTotals: restBillData.excludeFromTotals,
-              };
-            } else {
-              currentTransactions.splice(txIndex, 1);
-            }
-          } else if (paid) {
-            const targetScope = getValidScope(restBillData.scope, restBillData.category, restBillData.title);
-            currentTransactions.push({
-              id: autoTxId,
-              description: restBillData.title,
-              amount: restBillData.amount,
-              type: 'despesa',
-              category: restBillData.category,
-              scope: targetScope,
-              date: today,
-              paymentMethod: restBillData.paymentMethod,
-              paid: true,
-              excludeFromTotals: restBillData.excludeFromTotals,
-            });
-          }
-        } else {
-          // Check if bill with same title and dueDate already exists to prevent duplicates
-          const exists = currentBills.some(
-            (b) => b.title.trim().toLowerCase() === restBillData.title.trim().toLowerCase() && b.dueDate === restBillData.dueDate
-          );
-
-          if (!exists) {
-            const newId = `bill_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}`;
-            const newBill: Bill = {
+        if (targetId) {
+          const billIndex = currentBills.findIndex((b) => b.id === targetId);
+          if (billIndex >= 0) {
+            const prevBill = currentBills[billIndex];
+            const isNowPaid = paid !== undefined ? paid : (prevBill.status === 'pago');
+            currentBills[billIndex] = {
+              ...prevBill,
               ...restBillData,
-              id: newId,
-              status: paid ? 'pago' : 'pendente',
-              paidDate: paid ? (restBillData.dueDate || today) : undefined,
+              id: targetId,
+              status: isNowPaid ? 'pago' : 'pendente',
+              paidDate: isNowPaid ? (prevBill.paidDate || restBillData.dueDate || today) : undefined,
             };
-            currentBills.push(newBill);
 
-            if (paid) {
-              const autoTxId = `tx_auto_bill_${newId}`;
+            const autoTxId = `tx_auto_bill_${targetId}`;
+            const txIndex = currentTransactions.findIndex((t) => t.id === autoTxId);
+
+            if (txIndex >= 0) {
+              if (isNowPaid) {
+                const targetScope = getValidScope(restBillData.scope, restBillData.category, restBillData.title);
+                currentTransactions[txIndex] = {
+                  ...currentTransactions[txIndex],
+                  description: restBillData.title,
+                  amount: restBillData.amount,
+                  category: restBillData.category,
+                  scope: targetScope,
+                  paymentMethod: restBillData.paymentMethod,
+                  excludeFromTotals: restBillData.excludeFromTotals,
+                };
+              } else {
+                currentTransactions.splice(txIndex, 1);
+              }
+            } else if (isNowPaid) {
               const targetScope = getValidScope(restBillData.scope, restBillData.category, restBillData.title);
               currentTransactions.push({
                 id: autoTxId,
@@ -622,6 +592,40 @@ export default function App() {
                 excludeFromTotals: restBillData.excludeFromTotals,
               });
             }
+            continue;
+          }
+        }
+
+        // Check if bill with same title and dueDate already exists to prevent duplicates
+        const exists = currentBills.some(
+          (b) => b.title.trim().toLowerCase() === restBillData.title.trim().toLowerCase() && b.dueDate === restBillData.dueDate
+        );
+
+        if (!exists) {
+          const newId = `bill_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}`;
+          const newBill: Bill = {
+            ...restBillData,
+            id: newId,
+            status: paid ? 'pago' : 'pendente',
+            paidDate: paid ? (restBillData.dueDate || today) : undefined,
+          };
+          currentBills.push(newBill);
+
+          if (paid) {
+            const autoTxId = `tx_auto_bill_${newId}`;
+            const targetScope = getValidScope(restBillData.scope, restBillData.category, restBillData.title);
+            currentTransactions.push({
+              id: autoTxId,
+              description: restBillData.title,
+              amount: restBillData.amount,
+              type: 'despesa',
+              category: restBillData.category,
+              scope: targetScope,
+              date: restBillData.dueDate || today,
+              paymentMethod: restBillData.paymentMethod,
+              paid: true,
+              excludeFromTotals: restBillData.excludeFromTotals,
+            });
           }
         }
       }
@@ -738,6 +742,26 @@ export default function App() {
     });
   }, []);
 
+  // Handler: Delete Multiple Bills
+  const handleDeleteMultipleBills = useCallback((billIds: string[]) => {
+    const idSet = new Set(billIds);
+    setData((prev) => {
+      const nextData = {
+        ...prev,
+        bills: (prev.bills || []).filter((b) => !idSet.has(b.id)),
+        transactions: (prev.transactions || []).filter((t) => {
+          if (t.id.startsWith('tx_auto_bill_')) {
+            const billId = t.id.replace('tx_auto_bill_', '');
+            return !idSet.has(billId);
+          }
+          return true;
+        }),
+      };
+      saveAllAppData(nextData);
+      return nextData;
+    });
+  }, []);
+
   // Handler: Delete All Bills
   const handleDeleteAllBills = () => {
     setData((prev) => ({
@@ -806,21 +830,50 @@ export default function App() {
   // Handler: Delete Duplicate Bills
   const handleDeleteDuplicateBills = () => {
     setData((prev) => {
-      const seen = new Set<string>();
+      const groups = new Map<string, Bill[]>();
+
+      for (const bill of prev.bills) {
+        const titleKey = bill.title.toLowerCase().trim().replace(/\s+/g, ' ');
+        const scopeKey = (bill.scope || 'casa').toLowerCase();
+        const monthKey = bill.dueDate ? bill.dueDate.substring(0, 7) : '';
+        const key = `${scopeKey}___${monthKey}___${titleKey}`;
+        
+        if (!groups.has(key)) {
+          groups.set(key, []);
+        }
+        groups.get(key)!.push(bill);
+      }
+
       const uniqueBills: Bill[] = [];
       const keptBillIds = new Set<string>();
 
-      for (const bill of prev.bills) {
-        const titleKey = bill.title.toLowerCase().trim();
-        const amountKey = bill.amount;
-        const monthKey = bill.dueDate ? bill.dueDate.substring(0, 7) : '';
-        const key = `${titleKey}_${amountKey}_${monthKey}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          uniqueBills.push(bill);
-          keptBillIds.add(bill.id);
+      groups.forEach((billList) => {
+        if (billList.length === 1) {
+          uniqueBills.push(billList[0]);
+          keptBillIds.add(billList[0].id);
+        } else {
+          // Sort duplicates to keep the best/most complete record
+          const sorted = [...billList].sort((a, b) => {
+            let scoreA = 0;
+            let scoreB = 0;
+            if (a.status === 'pago') scoreA += 100;
+            if (b.status === 'pago') scoreB += 100;
+            if (a.barcode) scoreA += 20;
+            if (b.barcode) scoreB += 20;
+            if (a.pixCode) scoreA += 20;
+            if (b.pixCode) scoreB += 20;
+            if (a.notes) scoreA += 10;
+            if (b.notes) scoreB += 10;
+            if (!a.id.startsWith('bill_auto_')) scoreA += 10;
+            if (!b.id.startsWith('bill_auto_')) scoreB += 10;
+            return scoreB - scoreA;
+          });
+
+          const chosen = sorted[0];
+          uniqueBills.push(chosen);
+          keptBillIds.add(chosen.id);
         }
-      }
+      });
 
       const removedCount = prev.bills.length - uniqueBills.length;
 
@@ -834,7 +887,7 @@ export default function App() {
       });
 
       if (removedCount > 0) {
-        alert(`Foram removidas ${removedCount} contas duplicadas com sucesso!`);
+        alert(`Foram removidas ${removedCount} conta(s) duplicada(s) com sucesso! Seus dados estão agora limpos e organizados.`);
       } else {
         alert('Nenhuma conta duplicada encontrada.');
       }
@@ -1160,8 +1213,12 @@ export default function App() {
       const recurringMonthlyMap = new Map<string, Bill[]>();
 
       for (const b of existingBills) {
-        if (b.recurring === 'mensal') {
-          const key = b.title.trim().toLowerCase();
+        // Only process bills marked as monthly and not installments like (1/12)
+        const isInstallment = /\(\d+\/\d+\)/.test(b.title);
+        if (b.recurring === 'mensal' && !isInstallment) {
+          const scope = (b.scope || 'casa').toLowerCase();
+          const cleanTitle = b.title.trim().toLowerCase().replace(/\s+/g, ' ');
+          const key = `${scope}___${cleanTitle}`;
           if (!recurringMonthlyMap.has(key)) {
             recurringMonthlyMap.set(key, []);
           }
@@ -1172,10 +1229,19 @@ export default function App() {
       let hasChanges = false;
       const updatedBills = [...existingBills];
 
-      recurringMonthlyMap.forEach((billsList) => {
+      recurringMonthlyMap.forEach((billsList, groupKey) => {
+        const [groupScope, ...titleParts] = groupKey.split('___');
+        const cleanTitle = titleParts.join('___');
+
         const sorted = [...billsList].sort((a, b) => b.dueDate.localeCompare(a.dueDate));
         const previousBill = sorted.find((b) => !b.dueDate.startsWith(currentMonth)) || sorted[0];
-        const currentBillIndex = updatedBills.findIndex((b) => b.title.trim().toLowerCase() === billsList[0].title.trim().toLowerCase() && b.dueDate.startsWith(currentMonth) && b.recurring === 'mensal');
+
+        // Check if ANY bill already exists in current month for this title and scope
+        const currentBillIndex = updatedBills.findIndex((b) => {
+          const bScope = (b.scope || 'casa').toLowerCase();
+          const bTitle = b.title.trim().toLowerCase().replace(/\s+/g, ' ');
+          return bScope === groupScope && bTitle === cleanTitle && (b.dueDate || '').startsWith(currentMonth);
+        });
 
         if (currentBillIndex >= 0) {
           const currentBill = updatedBills[currentBillIndex];
@@ -1209,6 +1275,10 @@ export default function App() {
             status: 'pendente',
             recurring: 'mensal',
             excludeFromTotals: previousBill.excludeFromTotals,
+            barcode: previousBill.barcode,
+            pixCode: previousBill.pixCode,
+            recipient: previousBill.recipient,
+            notes: previousBill.notes,
           };
 
           updatedBills.push(newBill);
@@ -1217,10 +1287,36 @@ export default function App() {
         }
       });
 
+      // Deduplicate pass across updatedBills to eliminate any existing duplicates for this month
+      const dedupMap = new Map<string, Bill>();
+      const finalBills: Bill[] = [];
+      for (const bill of updatedBills) {
+        const month = (bill.dueDate || '').slice(0, 7);
+        const titleKey = bill.title.toLowerCase().trim().replace(/\s+/g, ' ');
+        const scopeKey = (bill.scope || 'casa').toLowerCase();
+        const dKey = `${scopeKey}___${month}___${titleKey}`;
+
+        if (!dedupMap.has(dKey)) {
+          dedupMap.set(dKey, bill);
+          finalBills.push(bill);
+        } else {
+          // Duplicate detected - keep the paid one or the one with barcode/details
+          const existing = dedupMap.get(dKey)!;
+          if (existing.status !== 'pago' && bill.status === 'pago') {
+            const idx = finalBills.indexOf(existing);
+            if (idx >= 0) finalBills[idx] = bill;
+            dedupMap.set(dKey, bill);
+            hasChanges = true;
+          } else {
+            hasChanges = true;
+          }
+        }
+      }
+
       if (hasChanges) {
         return {
           ...prev,
-          bills: updatedBills,
+          bills: finalBills,
         };
       }
       return prev;
@@ -1281,7 +1377,8 @@ export default function App() {
   const currentMonthStr = todayStr.slice(0, 7);
   
   const processedBills = useMemo(() => data.bills.map((b) => {
-    if (b.status === 'pendente' && b.dueDate < todayStr) {
+    const effectiveDueDate = getEffectiveDueDate(b.dueDate);
+    if (b.status === 'pendente' && effectiveDueDate < todayStr) {
       return { ...b, status: 'atrasado' as const };
     }
     return b;
@@ -1442,8 +1539,10 @@ export default function App() {
         }}
         onSave={handleSaveBill}
         onDelete={handleDeleteBill}
+        onDeleteMultiple={handleDeleteMultipleBills}
         editingBill={editingBill}
         defaultScope={defaultScopeForBill}
+        existingBills={data.bills}
       />
 
       <CalculatorsModal

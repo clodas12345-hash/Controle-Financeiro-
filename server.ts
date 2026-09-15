@@ -94,9 +94,6 @@ ATENÇÃO: Números devem ser puros, formato decimal (ex: 129.21). Retorne os da
 
       const rawText = response.text || '';
       console.log('AI Response rawText:', rawText);
-      try {
-        require('fs').writeFileSync('last_ai_response.txt', rawText);
-      } catch(e) {}
       let parsedData;
       try {
         const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -312,7 +309,7 @@ RETORNE APENAS UM OBJETO JSON COM A SEGUINTE ESTRUTURA EXATA (sem markdown):
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*all', (req, res) => {
+    app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

@@ -13,9 +13,10 @@ import {
   VolumeX,
   Play,
   Music,
+  CalendarClock,
 } from 'lucide-react';
 import { Bill, Transaction } from '../types';
-import { formatBRL, formatDateBR, getTodayStr } from '../lib/storage';
+import { formatBRL, formatDateBR, getTodayStr, getDueDateBusinessInfo, getEffectiveDueDate } from '../lib/storage';
 
 interface DueBillsAlertModalProps {
   bills: Bill[];
@@ -134,14 +135,14 @@ export const DueBillsAlertModal: React.FC<DueBillsAlertModalProps> = ({
 }) => {
   const todayStr = getTodayStr();
 
-  // Filter unpaid bills due today or overdue
+  // Filter unpaid bills due today or overdue (accounting for weekends and holidays rolling to next business day)
   const dueBills = bills.filter(
-    (b) => (b.status === 'pendente' || b.status === 'atrasado') && b.dueDate <= todayStr && b.paymentMethod !== 'SEM PAGAMENTO'
+    (b) => (b.status === 'pendente' || b.status === 'atrasado') && getEffectiveDueDate(b.dueDate) <= todayStr && b.paymentMethod !== 'SEM PAGAMENTO'
   );
 
   // Filter unpaid transactions due today or overdue
   const dueTransactions = transactions.filter(
-    (t) => t.type === 'despesa' && !t.paid && t.date <= todayStr && !t.id.startsWith('tx_auto_bill_')
+    (t) => t.type === 'despesa' && !t.paid && getEffectiveDueDate(t.date) <= todayStr && !t.id.startsWith('tx_auto_bill_')
   );
 
   const totalDueItems = dueBills.length + dueTransactions.length;
@@ -351,7 +352,8 @@ export const DueBillsAlertModal: React.FC<DueBillsAlertModalProps> = ({
         {/* List of Due Items */}
         <div className="p-5 overflow-y-auto space-y-3 flex-1">
           {dueBills.map((b) => {
-            const isToday = b.dueDate === todayStr;
+            const businessInfo = getDueDateBusinessInfo(b.dueDate);
+            const isToday = businessInfo.effectiveDueDate === todayStr;
             return (
               <div
                 key={b.id}
@@ -370,11 +372,30 @@ export const DueBillsAlertModal: React.FC<DueBillsAlertModalProps> = ({
                           : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                       }`}
                     >
-                      {isToday ? 'Vence Hoje' : 'Atrasada'}
+                      {isToday
+                        ? businessInfo.isNonBusinessDay
+                          ? 'Vence Hoje (Próx. Dia Útil)'
+                          : 'Vence Hoje'
+                        : 'Atrasada'}
                     </span>
                   </div>
-                  <div className="text-xs text-slate-400 flex items-center gap-2">
-                    <span>Vencimento: <strong className="text-slate-200">{formatDateBR(b.dueDate)}</strong></span>
+                  <div className="text-xs text-slate-400 flex flex-wrap items-center gap-2">
+                    <span>
+                      Vencimento: <strong className="text-slate-200">{formatDateBR(b.dueDate)}</strong>
+                      {businessInfo.isNonBusinessDay && ` (${businessInfo.originalDayOfWeek.slice(0, 3)})`}
+                    </span>
+                    {businessInfo.isNonBusinessDay && (
+                      <span
+                        className="inline-flex items-center gap-1 bg-cyan-950/70 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                        title={businessInfo.noticeText}
+                      >
+                        <CalendarClock className="w-3 h-3 text-cyan-400 shrink-0" />
+                        <span>
+                          {businessInfo.holidayName ? `${businessInfo.holidayName.split(' ')[0]} • ` : ''}
+                          Próx. dia útil: <strong className="text-white font-bold">{businessInfo.formattedEffective.slice(0, 5)} ({businessInfo.effectiveDayOfWeek.slice(0, 3)})</strong>
+                        </span>
+                      </span>
+                    )}
                     {b.recipient && <span>• {b.recipient}</span>}
                   </div>
                 </div>
@@ -396,7 +417,8 @@ export const DueBillsAlertModal: React.FC<DueBillsAlertModalProps> = ({
           })}
 
           {dueTransactions.map((t) => {
-            const isToday = t.date === todayStr;
+            const businessInfo = getDueDateBusinessInfo(t.date);
+            const isToday = businessInfo.effectiveDueDate === todayStr;
             return (
               <div
                 key={t.id}
@@ -415,11 +437,29 @@ export const DueBillsAlertModal: React.FC<DueBillsAlertModalProps> = ({
                           : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                       }`}
                     >
-                      {isToday ? 'Vence Hoje' : 'Atrasada'}
+                      {isToday
+                        ? businessInfo.isNonBusinessDay
+                          ? 'Vence Hoje (Próx. Dia Útil)'
+                          : 'Vence Hoje'
+                        : 'Atrasada'}
                     </span>
                   </div>
-                  <div className="text-xs text-slate-400">
-                    Lançamento Diário • Data: <strong className="text-slate-200">{formatDateBR(t.date)}</strong>
+                  <div className="text-xs text-slate-400 flex flex-wrap items-center gap-2">
+                    <span>
+                      Lançamento Diário • Data: <strong className="text-slate-200">{formatDateBR(t.date)}</strong>
+                      {businessInfo.isNonBusinessDay && ` (${businessInfo.originalDayOfWeek.slice(0, 3)})`}
+                    </span>
+                    {businessInfo.isNonBusinessDay && (
+                      <span
+                        className="inline-flex items-center gap-1 bg-cyan-950/70 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                        title={businessInfo.noticeText}
+                      >
+                        <CalendarClock className="w-3 h-3 text-cyan-400 shrink-0" />
+                        <span>
+                          Próx. dia útil: <strong className="text-white font-bold">{businessInfo.formattedEffective.slice(0, 5)} ({businessInfo.effectiveDayOfWeek.slice(0, 3)})</strong>
+                        </span>
+                      </span>
+                    )}
                   </div>
                 </div>
 

@@ -206,56 +206,31 @@ export async function exportFullBackupUniversal(
 
   if (Capacitor.isNativePlatform()) {
     try {
-      if (mode === 'download') {
-        // Explicitly request permissions for Directory.Documents
-        const permStatus = await Filesystem.checkPermissions();
-        if (permStatus.publicStorage !== 'granted') {
-          const req = await Filesystem.requestPermissions();
-          if (req.publicStorage !== 'granted') {
-            throw new Error('Permissão de armazenamento negada pelo usuário.');
-          }
-        }
-        
-        await Filesystem.writeFile({
-          path: 'Download/' + filename,
-          data: jsonStr,
-          directory: Directory.ExternalStorage,
-          encoding: Encoding.UTF8
-        });
-        return {
-          success: true,
-          filename,
-          totalRecords: payload.summary.totalRecords,
-          method: 'downloaded',
-          message: 'Arquivo de backup salvo com sucesso na pasta Downloads do seu celular!',
-        };
-      } else {
-        const result = await Filesystem.writeFile({
-          path: 'Download/' + filename,
-          data: jsonStr,
-          directory: Directory.Cache,
-          encoding: Encoding.UTF8
-        });
-        await Share.share({
-          title: 'Backup Controle Financeiro',
-          text: `Backup com todos os dados (${payload.summary.totalRecords} registros) gerado em ${now.toLocaleDateString('pt-BR')}.`,
-          url: result.uri,
-          dialogTitle: 'Compartilhar Backup'
-        });
-        return {
-          success: true,
-          filename,
-          totalRecords: payload.summary.totalRecords,
-          method: 'shared',
-          message: 'Backup enviado para compartilhamento.',
-        };
-      }
+      // Directory.Cache does NOT require dangerous public storage permissions on Android 10/11/12/13/14+
+      const result = await Filesystem.writeFile({
+        path: filename,
+        data: jsonStr,
+        directory: Directory.Cache,
+        encoding: Encoding.UTF8,
+      });
+
+      await Share.share({
+        title: 'Backup Controle Financeiro',
+        text: `Backup com todos os dados (${payload.summary.totalRecords} registros) gerado em ${now.toLocaleDateString('pt-BR')}.`,
+        url: result.uri,
+        dialogTitle: 'Salvar ou Compartilhar Backup',
+      });
+
+      return {
+        success: true,
+        filename,
+        totalRecords: payload.summary.totalRecords,
+        method: 'shared',
+        message: 'Arquivo de backup pronto! Selecione Salvar no Dispositivo, WhatsApp ou Google Drive.',
+      };
     } catch (err: any) {
-      console.warn('Native share/write failed:', err);
-      if (mode === 'download') {
-        throw new Error(err?.message || 'Falha ao salvar arquivo no armazenamento do celular.');
-      }
-      // If it's 'share' and it failed, we can let it fall back
+      console.warn('Native share/write fallback:', err);
+      // Let it fall back seamlessly to browser/webview download without throwing a blocking error
     }
   }
 
