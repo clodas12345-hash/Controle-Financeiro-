@@ -18,6 +18,7 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
+  Share,
 } from 'lucide-react';
 import {
   exportFullBackupUniversal,
@@ -353,15 +354,26 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleUniversalBackup}
-                  disabled={isExporting}
-                  className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-bold rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>{isExporting ? 'Processando Backup...' : 'Exportar / Compartilhar Backup (.JSON)'}</span>
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleUniversalBackup('download')}
+                    disabled={isExporting}
+                    className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-bold rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Salvar no Celular</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUniversalBackup('share')}
+                    disabled={isExporting}
+                    className="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 active:scale-[0.98] text-white font-bold rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                  >
+                    <Share className="w-4 h-4" />
+                    <span>Compartilhar (WhatsApp)</span>
+                  </button>
+                </div>
               </div>
 
               {/* Secondary Export Options */}
@@ -611,7 +623,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         <div className="p-4 sm:p-5 border-t border-white/10 bg-[#161618] flex items-center justify-between gap-3">
           <button
             type="button"
-            onClick={handleUniversalBackup}
+            onClick={() => handleUniversalBackup('download')}
             disabled={isExporting}
             className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs sm:text-sm transition flex items-center gap-2 cursor-pointer shadow-md active:scale-95 disabled:opacity-50"
           >

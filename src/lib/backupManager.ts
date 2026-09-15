@@ -188,7 +188,8 @@ export interface UniversalBackupResult {
  * with graceful fallback to browser download and clipboard.
  */
 export async function exportFullBackupUniversal(
-  appData?: ReturnType<typeof loadAllAppData>
+  appData?: ReturnType<typeof loadAllAppData>,
+  mode: 'download' | 'share' = 'share'
 ): Promise<UniversalBackupResult> {
   const payload = generateFullBackupPayload(appData);
   const jsonStr = JSON.stringify(payload, null, 2);
@@ -205,27 +206,44 @@ export async function exportFullBackupUniversal(
 
   if (Capacitor.isNativePlatform()) {
     try {
-      const result = await Filesystem.writeFile({
-        path: filename,
-        data: jsonStr,
-        directory: Directory.Documents,
-        encoding: Encoding.UTF8
-      });
-      await Share.share({
-        title: 'Backup Controle Financeiro',
-        text: `Backup com todos os dados (${payload.summary.totalRecords} registros) gerado em ${now.toLocaleDateString('pt-BR')}.`,
-        url: result.uri,
-        dialogTitle: 'Compartilhar Backup'
-      });
-      return {
-        success: true,
-        filename,
-        totalRecords: payload.summary.totalRecords,
-        method: 'shared',
-        message: 'Backup salvo na pasta Documentos do seu celular! Você também pode compartilhar agora.',
-      };
+      if (mode === 'download') {
+        await Filesystem.writeFile({
+          path: filename,
+          data: jsonStr,
+          directory: Directory.Documents,
+          encoding: Encoding.UTF8
+        });
+        return {
+          success: true,
+          filename,
+          totalRecords: payload.summary.totalRecords,
+          method: 'downloaded',
+          message: 'Arquivo de backup salvo com sucesso na pasta Documentos do seu celular!',
+        };
+      } else {
+        const result = await Filesystem.writeFile({
+          path: filename,
+          data: jsonStr,
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8
+        });
+        await Share.share({
+          title: 'Backup Controle Financeiro',
+          text: `Backup com todos os dados (${payload.summary.totalRecords} registros) gerado em ${now.toLocaleDateString('pt-BR')}.`,
+          url: result.uri,
+          dialogTitle: 'Compartilhar Backup'
+        });
+        return {
+          success: true,
+          filename,
+          totalRecords: payload.summary.totalRecords,
+          method: 'shared',
+          message: 'Backup enviado para compartilhamento.',
+        };
+      }
     } catch (err) {
       console.warn('Native share/write failed:', err);
+      // Fallback
     }
   }
 
