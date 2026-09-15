@@ -195,7 +195,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="bg-[#161618] text-white border-b border-white/5 z-30 shadow-md safe-top">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 space-y-2.5">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-3.5 pb-2.5 space-y-2.5">
         {/* Top Header Bar: Logo, Title & Utility Gear */}
         <div className="flex items-center justify-between gap-3 sm:gap-4">
           {/* Logo & Branding */}

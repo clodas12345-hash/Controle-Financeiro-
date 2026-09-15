@@ -22,7 +22,8 @@ import {
   Calculator,
   Camera,
   CalendarClock,
-  CopyX
+  CopyX,
+  ArrowUp
 } from 'lucide-react';
 import { Bill, CategoryScope, Transaction, TransactionCategory, PaymentMethod, isVariableBill } from '../types';
 import { formatBRL, formatDateBR, getDueDateBusinessInfo, getEffectiveDueDate } from '../lib/storage';
@@ -1631,6 +1632,18 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
             )}
           </div>
         )}
+      </div>
+
+      {/* Botão de Atalho para Voltar ao Topo */}
+      <div className="pt-2 pb-6 flex justify-center">
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="px-5 py-2.5 bg-white/5 hover:bg-white/10 active:scale-95 text-slate-300 hover:text-white text-xs font-semibold rounded-full border border-white/10 flex items-center gap-2 transition cursor-pointer shadow-sm"
+        >
+          <ArrowUp className="w-4 h-4 text-amber-400" />
+          <span>Voltar ao Topo das Contas</span>
+        </button>
       </div>
       </div>
       )}

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gkd-mobility-v3';
+const CACHE_NAME = 'gkd-mobility-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
