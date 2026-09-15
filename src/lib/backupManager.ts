@@ -208,7 +208,7 @@ export async function exportFullBackupUniversal(
       const result = await Filesystem.writeFile({
         path: filename,
         data: jsonStr,
-        directory: Directory.Cache,
+        directory: Directory.Documents,
         encoding: Encoding.UTF8
       });
       await Share.share({
@@ -222,7 +222,7 @@ export async function exportFullBackupUniversal(
         filename,
         totalRecords: payload.summary.totalRecords,
         method: 'shared',
-        message: 'Backup enviado para o compartilhamento! Você pode salvar no Google Drive, WhatsApp ou Arquivos.',
+        message: 'Backup salvo na pasta Documentos do seu celular! Você também pode compartilhar agora.',
       };
     } catch (err) {
       console.warn('Native share/write failed:', err);
@@ -244,7 +244,7 @@ export async function exportFullBackupUniversal(
           filename,
           totalRecords: payload.summary.totalRecords,
           method: 'shared',
-          message: `Backup enviado para o compartilhamento! Você pode salvar no Google Drive, WhatsApp ou Arquivos.`,
+          message: `Backup salvo na pasta Documentos do seu celular! Você também pode compartilhar agora.`,
         };
       }
     } catch (shareErr: any) {

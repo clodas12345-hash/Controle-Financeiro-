@@ -201,7 +201,7 @@ export function exportAppToExcel(appData?: ReturnType<typeof loadAllAppData>) {
       Filesystem.writeFile({
         path: fileName,
         data: base64,
-        directory: Directory.Cache
+        directory: Directory.Documents
       }).then((result) => {
         Share.share({
           title: 'Planilha Controle Financeiro',
