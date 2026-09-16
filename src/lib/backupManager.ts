@@ -218,7 +218,8 @@ export async function exportFullBackupUniversal(
         title: 'Backup Controle Financeiro',
         text: `Backup com todos os dados (${payload.summary.totalRecords} registros) gerado em ${now.toLocaleDateString('pt-BR')}.`,
         url: result.uri,
-        dialogTitle: 'Salvar ou Compartilhar Backup',
+        files: [result.uri],
+        dialogTitle: 'Compartilhar Backup',
       });
 
       return {
@@ -226,7 +227,7 @@ export async function exportFullBackupUniversal(
         filename,
         totalRecords: payload.summary.totalRecords,
         method: 'shared',
-        message: 'Arquivo de backup pronto! Selecione Salvar no Dispositivo, WhatsApp ou Google Drive.',
+        message: 'Menu de compartilhamento aberto! Escolha Salvar no Dispositivo, WhatsApp ou Google Drive.',
       };
     } catch (err: any) {
       console.warn('Native share/write fallback:', err);

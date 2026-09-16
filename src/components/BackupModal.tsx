@@ -347,31 +347,22 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
                 <div>
                   <h4 className="font-black text-sm text-white">
-                    Salvar / Compartilhar Backup Completo
+                    Compartilhar Backup Completo (.JSON)
                   </h4>
                   <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                    Gera o arquivo com 100% das suas contas, despesas, cartões e lançamentos. No celular, abre o menu para salvar no Google Drive, WhatsApp ou Meus Arquivos. No computador, faz o download imediato.
+                    Gera o arquivo com 100% dos seus dados. No celular e no APK, abre o menu nativo para compartilhar via <strong>WhatsApp</strong>, salvar no <strong>Google Drive</strong> ou em <strong>Meus Arquivos</strong>.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleUniversalBackup('download')}
-                    disabled={isExporting}
-                    className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-bold rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Salvar no Celular</span>
-                  </button>
+                <div>
                   <button
                     type="button"
                     onClick={() => handleUniversalBackup('share')}
                     disabled={isExporting}
-                    className="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 active:scale-[0.98] text-white font-bold rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                    className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-bold rounded-xl text-sm transition flex items-center justify-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
                   >
-                    <Share className="w-4 h-4" />
-                    <span>Compartilhar (WhatsApp)</span>
+                    <Share2 className="w-4 h-4" />
+                    <span>{isExporting ? 'Preparando Backup...' : 'Compartilhar Backup (WhatsApp / Drive / Arquivos)'}</span>
                   </button>
                 </div>
               </div>
