@@ -519,8 +519,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               <input
                 type="number"
                 step="0.01"
-                placeholder="0.00"
-                value={amount === '' ? '' : amount}
+                placeholder="0,00"
+                value={amount === '' || amount === 0 ? '' : amount}
+                onFocus={(e) => {
+                  if (amount === 0 || amount === '0') {
+                    setAmount('');
+                  }
+                  e.target.select();
+                }}
                 onChange={(e) => {
                   const val = e.target.value;
                   if (val === '') {

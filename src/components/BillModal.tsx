@@ -23,7 +23,8 @@ import {
   Calendar,
   CalendarClock,
   QrCode,
-  Copy
+  Copy,
+  ShieldCheck
 } from 'lucide-react';
 import { Bill, TransactionCategory, CategoryScope, PaymentMethod, SCOPE_CATEGORIES } from '../types';
 import { getTodayStr, addMonthsToDateString, formatBRL, getBaseBillTitle, getDueDateBusinessInfo } from '../lib/storage';
@@ -91,7 +92,8 @@ export const BillModal: React.FC<BillModalProps> = ({
   const [includeInCarDaily, setIncludeInCarDaily] = useState(false);
 
   // Bulk / Multiple bills synchronization scope ('all' | 'future' | 'single')
-  const [updateScope, setUpdateScope] = useState<'all' | 'future' | 'single'>('all');
+  // Default to 'single' so editing a bill only edits that specific instance
+  const [updateScope, setUpdateScope] = useState<'all' | 'future' | 'single'>('single');
 
   const baseTitle = editingBill ? getBaseBillTitle(editingBill.title) : '';
   const matchingBills = React.useMemo(() => {
@@ -150,7 +152,7 @@ export const BillModal: React.FC<BillModalProps> = ({
   useEffect(() => {
     if (editingBill) {
       setTitle(editingBill.title || '');
-      setAmount(editingBill.amount ?? 0);
+      setAmount(editingBill.amount && editingBill.amount > 0 ? editingBill.amount : '');
       setDueDate(editingBill.dueDate || getTodayStr());
       setScope(editingBill.scope || 'casa');
       setCategory(editingBill.category || 'Moradia');
@@ -184,7 +186,7 @@ export const BillModal: React.FC<BillModalProps> = ({
       }
       setInstallments(2);
       setIncludeInCarDaily(!!editingBill.includeInCarDaily);
-      setUpdateScope('all');
+      setUpdateScope('single');
     } else {
       setTitle('');
       setAmount('');
@@ -555,7 +557,7 @@ export const BillModal: React.FC<BillModalProps> = ({
           billsBatch.push({
             id: b.id,
             title: title.trim(),
-            amount: numericAmount,
+            amount: isThisBill ? numericAmount : b.amount, // Valor é estritamente individual por conta
             dueDate: targetDueDate,
             category,
             scope,
@@ -564,8 +566,8 @@ export const BillModal: React.FC<BillModalProps> = ({
             recipient: recipient.trim() || undefined,
             notes: notes.trim() || undefined,
             paid: isThisBill ? isPaid : (b.status === 'pago'),
-            barcode: isThisBill ? (barcode || undefined) : (b.barcode || undefined),
-            pixCode: isThisBill ? (pixCode || undefined) : (b.pixCode || undefined),
+            barcode: isThisBill ? (barcode || undefined) : (b.barcode || undefined), // Código de barras estritamente individual
+            pixCode: isThisBill ? (pixCode || undefined) : (b.pixCode || undefined), // PIX estritamente individual
             installment: undefined,
           });
         }
@@ -907,8 +909,13 @@ export const BillModal: React.FC<BillModalProps> = ({
                 </div>
 
                 <p className="text-[11px] text-white/70 leading-tight">
-                  Ao salvar as alterações, onde você deseja aplicar?
+                  Ao salvar as alterações, onde você deseja aplicar o título/categoria/vencimento?
                 </p>
+
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-[10px] text-emerald-300">
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                  <span><strong>Proteção Individual:</strong> O Valor, Código de Barras e PIX são 100% individuais e nunca são alterados em massa.</span>
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <button
@@ -982,8 +989,22 @@ export const BillModal: React.FC<BillModalProps> = ({
                     type="number"
                     step="0.01"
                     placeholder="0,00"
-                    value={amount === '' ? '' : amount}
-                    onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                    value={amount === '' || amount === 0 ? '' : amount}
+                    onFocus={(e) => {
+                      if (amount === 0 || amount === '0') {
+                        setAmount('');
+                      }
+                      e.target.select();
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setAmount('');
+                      } else {
+                        const parsed = parseFloat(val);
+                        setAmount(isNaN(parsed) ? '' : parsed);
+                      }
+                    }}
                     disabled={isPaidLocked}
                     className="w-full bg-[#1A1A1E] border border-white/10 focus:border-amber-400 rounded-2xl pl-9 pr-3 py-2.5 text-xs font-bold text-amber-400 focus:outline-none transition disabled:opacity-50 disabled:cursor-not-allowed"
                   />

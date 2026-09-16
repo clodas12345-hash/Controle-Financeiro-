@@ -1244,20 +1244,10 @@ export default function App() {
         });
 
         if (currentBillIndex >= 0) {
-          const currentBill = updatedBills[currentBillIndex];
-          // If it's a fixed bill (NOT credit card / energy) and amount differs from last month, update it to match
-          if (!isVariableBill(currentBill.title, currentBill.category) && previousBill && previousBill.id !== currentBill.id) {
-            if (currentBill.amount !== previousBill.amount) {
-              updatedBills[currentBillIndex] = {
-                ...currentBill,
-                amount: previousBill.amount,
-              };
-              hasChanges = true;
-              updatedOrAddedCount++;
-            }
-          }
+          // Bill already exists for this month: NEVER overwrite its amount, barcode, or pixCode.
+          // Values and payment codes are strictly individual for each month.
         } else if (previousBill) {
-          // Bill does not exist for current month: create it with previous month's amount
+          // Bill does not exist for current month: create it as template with base amount, but WITHOUT copying previous barcode/pix
           const day = parseInt(previousBill.dueDate.split('-')[2] || '1', 10);
           const [year, month] = currentMonth.split('-').map(Number);
           const maxDays = new Date(year, month, 0).getDate();
@@ -1275,8 +1265,8 @@ export default function App() {
             status: 'pendente',
             recurring: 'mensal',
             excludeFromTotals: previousBill.excludeFromTotals,
-            barcode: previousBill.barcode,
-            pixCode: previousBill.pixCode,
+            barcode: undefined, // Barcode is strictly individual to each month
+            pixCode: undefined, // PIX is strictly individual to each month
             recipient: previousBill.recipient,
             notes: previousBill.notes,
           };
