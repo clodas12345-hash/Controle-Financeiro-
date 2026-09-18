@@ -78,7 +78,17 @@ export const BillModal: React.FC<BillModalProps> = ({
   const [bankModalItem, setBankModalItem] = useState<{ isOpen: boolean, isPix: boolean }>({ isOpen: false, isPix: false });
   const [pixCode, setPixCode] = useState("");
   const [showBarcode, setShowBarcode] = useState(false);
+  const [showBatchUpdate, setShowBatchUpdate] = useState(false);
   const [copiedField, setCopiedField] = useState<'barcode' | 'pix' | null>(null);
+  const [amountInputStr, setAmountInputStr] = useState<string>('');
+
+  useEffect(() => {
+    if (amount === '' || amount === 0) {
+      setAmountInputStr('');
+    } else {
+      setAmountInputStr(typeof amount === 'number' ? amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(amount));
+    }
+  }, [amount]);
 
   // Bill Type / Mode: 'fixa' (Monthly across all months), 'parcelada' (Installments), 'unica' (One-off)
   const [billType, setBillType] = useState<'fixa' | 'parcelada' | 'unica'>('fixa');
@@ -163,7 +173,7 @@ export const BillModal: React.FC<BillModalProps> = ({
       setBarcode(editingBill.barcode || "");
       setPixCode(editingBill.pixCode || "");
       setIsPaid(editingBill.status === 'pago');
-      setShowBarcode(true); // Always display barcode & PIX data immediately when opening bill details!
+      setShowBarcode(false); // Always start collapsed / retracted as requested
       
       const installmentMatch = editingBill.title ? editingBill.title.match(/\((\d+)\/(\d+)\)/) : null;
       if (editingBill.installment || installmentMatch) {
@@ -657,51 +667,51 @@ export const BillModal: React.FC<BillModalProps> = ({
           </button>
         </div>
 
-        {/* AI Scanner Banner */}
-        <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-white/5 px-5 py-2.5 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs text-amber-300 font-medium">
-            <Sparkles className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
-            <span>Leitura por IA (Foto / Boleto)</span>
-          </div>
-          <div className="flex flex-wrap gap-2 justify-end">
-            <label className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 border border-amber-500/40 rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-1.5 shrink-0">
-              {isProcessing ? (
-                <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
-              ) : (
-                <Camera className="w-3 h-3 text-amber-400" />
-              )}
-              <span>Câmera</span>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={handlePhotoCapture}
-                disabled={isProcessing}
-              />
-            </label>
-            <label className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white/80 hover:text-white border border-white/20 rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-1.5 shrink-0">
-              <span>Scanner / Galeria</span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handlePhotoCapture}
-                disabled={isProcessing}
-              />
-            </label>
-          </div>
-        </div>
-
-        {aiMessage && (
-          <div className="px-5 py-2 bg-amber-500/10 text-amber-300 text-xs border-b border-amber-500/20 flex items-center gap-2 animate-fadeIn">
-            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>{aiMessage}</span>
-          </div>
-        )}
-
         <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
           <div className="p-5 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
+            {/* AI Scanner Banner (Sticky at top so it is always accessible when scrolling up/down) */}
+            <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/30 rounded-2xl p-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-amber-300 font-medium">
+                <Sparkles className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+                <span>Leitura por IA (Foto / Boleto)</span>
+              </div>
+              <div className="flex flex-wrap gap-2 justify-end">
+                <label className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 border border-amber-500/40 rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-1.5 shrink-0">
+                  {isProcessing ? (
+                    <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                  ) : (
+                    <Camera className="w-3 h-3 text-amber-400" />
+                  )}
+                  <span>Câmera</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={handlePhotoCapture}
+                    disabled={isProcessing}
+                  />
+                </label>
+                <label className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white/80 hover:text-white border border-white/20 rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-1.5 shrink-0">
+                  <span>Scanner / Galeria</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handlePhotoCapture}
+                    disabled={isProcessing}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {aiMessage && (
+              <div className="p-3 bg-amber-500/10 text-amber-300 text-xs border border-amber-500/20 rounded-xl flex items-center gap-2 animate-fadeIn">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>{aiMessage}</span>
+              </div>
+            )}
+
             {/* Lock Notice if Paid */}
             {isPaidLocked && (
               <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-start gap-2.5 text-xs text-amber-300">
@@ -895,70 +905,7 @@ export const BillModal: React.FC<BillModalProps> = ({
               </div>
             </div>
 
-            {/* Mass Update Selector for recurring/matching bills */}
-            {editingBill && matchingBills.length > 1 && (
-              <div className="p-3.5 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-purple-500/10 border border-amber-500/30 rounded-2xl space-y-2.5 animate-fadeIn">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
-                    <Repeat className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Existem {matchingBills.length} contas com este título ("{baseTitle}")</span>
-                  </div>
-                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-lg border border-amber-500/40 font-bold whitespace-nowrap">
-                    Alteração em Lote
-                  </span>
-                </div>
 
-                <p className="text-[11px] text-white/70 leading-tight">
-                  Ao salvar as alterações, onde você deseja aplicar o título/categoria/vencimento?
-                </p>
-
-                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-[10px] text-emerald-300">
-                  <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
-                  <span><strong>Proteção Individual:</strong> O Valor, Código de Barras e PIX são 100% individuais e nunca são alterados em massa.</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setUpdateScope('all')}
-                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-0.5 ${
-                      updateScope === 'all'
-                        ? 'bg-amber-500 text-slate-950 font-extrabold border-amber-400 shadow-md'
-                        : 'bg-[#141416] text-white/70 border-white/10 hover:border-white/20'
-                    }`}
-                  >
-                    <span className="text-xs font-bold">Todas as {matchingBills.length} Contas</span>
-                    <span className="text-[9px] opacity-80 leading-tight">Mudar todas as iguais</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setUpdateScope('future')}
-                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-0.5 ${
-                      updateScope === 'future'
-                        ? 'bg-amber-500 text-slate-950 font-extrabold border-amber-400 shadow-md'
-                        : 'bg-[#141416] text-white/70 border-white/10 hover:border-white/20'
-                    }`}
-                  >
-                    <span className="text-xs font-bold">Esta e as Próximas</span>
-                    <span className="text-[9px] opacity-80 leading-tight">A partir deste mês</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setUpdateScope('single')}
-                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-0.5 ${
-                      updateScope === 'single'
-                        ? 'bg-amber-500 text-slate-950 font-extrabold border-amber-400 shadow-md'
-                        : 'bg-[#141416] text-white/70 border-white/10 hover:border-white/20'
-                    }`}
-                  >
-                    <span className="text-xs font-bold">Apenas Esta Conta</span>
-                    <span className="text-[9px] opacity-80 leading-tight">Somente este registro</span>
-                  </button>
-                </div>
-              </div>
-            )}
 
             {/* Observação / O que se refere */}
             <div>
@@ -986,23 +933,20 @@ export const BillModal: React.FC<BillModalProps> = ({
                     R$
                   </span>
                   <input
-                    type="number"
-                    step="0.01"
+                    type="text"
+                    inputMode="numeric"
                     placeholder="0,00"
-                    value={amount === '' || amount === 0 ? '' : amount}
+                    value={typeof amount === 'number' && !isNaN(amount) && amount > 0 ? amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
                     onFocus={(e) => {
-                      if (amount === 0 || amount === '0') {
-                        setAmount('');
-                      }
                       e.target.select();
                     }}
                     onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === '') {
+                      const digits = e.target.value.replace(/\D/g, '');
+                      if (!digits) {
                         setAmount('');
                       } else {
-                        const parsed = parseFloat(val);
-                        setAmount(isNaN(parsed) ? '' : parsed);
+                        const num = Number(digits) / 100;
+                        setAmount(num);
                       }
                     }}
                     disabled={isPaidLocked}
@@ -1190,13 +1134,8 @@ export const BillModal: React.FC<BillModalProps> = ({
 
             {/* Tipo de Conta / Frequência */}
             <div className="space-y-2">
-              <label className="block text-xs font-semibold text-white/70 flex items-center justify-between">
+              <label className="block text-xs font-semibold text-white/70">
                 <span>Tipo de Conta</span>
-                {!editingBill && billType === 'fixa' && (
-                  <span className="text-[10px] text-amber-300 font-bold bg-amber-500/15 px-2 py-0.5 rounded-lg border border-amber-500/30">
-                    Replicada em Todos os Meses
-                  </span>
-                )}
               </label>
 
               <div className="grid grid-cols-3 gap-2">
@@ -1258,14 +1197,7 @@ export const BillModal: React.FC<BillModalProps> = ({
                 </button>
               </div>
 
-              {billType === 'fixa' && (
-                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-[11px] text-amber-200/90 leading-relaxed flex items-start gap-2.5 animate-fadeIn">
-                  <Pin className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <strong>Conta Fixa Permanente:</strong> Ao salvar, esta conta será criada e carregada em todos os meses (do início ao fim do ano). Em cada mês você poderá atualizar valores, código de barras e data de vencimento.
-                  </div>
-                </div>
-              )}
+
 
               {billType === 'parcelada' && (
                 <div className="p-3.5 bg-purple-500/10 border border-purple-500/30 rounded-2xl space-y-3 animate-fadeIn">
@@ -1439,27 +1371,81 @@ export const BillModal: React.FC<BillModalProps> = ({
 
 
 
-            {/* Toggle Paid */}
-            <div className="p-3.5 bg-[#1A1A1E] border border-white/5 rounded-2xl flex items-center justify-between gap-3">
-              <div>
-                <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                  <Check className="w-4 h-4 text-emerald-400" />
-                  <span>Já foi pago?</span>
-                </div>
-                <div className="text-[10px] text-emerald-300/70 mt-0.5">
-                  Se ativado, a conta será quitada e lançada automaticamente como despesa confirmada no relatório.
-                </div>
+
+
+            {/* Mass Update Selector (At the bottom, retracted by default) */}
+            {editingBill && matchingBills.length > 1 && (
+              <div className="rounded-2xl border border-amber-500/30 bg-[#161618] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowBatchUpdate(!showBatchUpdate)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 text-xs font-bold text-amber-300 transition cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Repeat className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Opções de Alteração em Lote ({matchingBills.length} contas com este título)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-white/60">
+                    <span>{showBatchUpdate ? 'Ocultar' : 'Exibir'}</span>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showBatchUpdate ? 'rotate-180' : ''}`} />
+                  </div>
+                </button>
+
+                {showBatchUpdate && (
+                  <div className="p-4 bg-[#1A1A1E] space-y-3 border-t border-white/5 animate-fadeIn">
+                    <p className="text-[11px] text-white/70 leading-tight">
+                      Ao salvar as alterações, onde você deseja aplicar o título/categoria/vencimento?
+                    </p>
+
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-[10px] text-emerald-300">
+                      <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                      <span><strong>Proteção Individual:</strong> O Valor, Código de Barras e PIX são 100% individuais e nunca são alterados em massa.</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setUpdateScope('all')}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-0.5 ${
+                          updateScope === 'all'
+                            ? 'bg-amber-500 text-slate-950 font-extrabold border-amber-400 shadow-md'
+                            : 'bg-[#141416] text-white/70 border-white/10 hover:border-white/20'
+                        }`}
+                      >
+                        <span className="text-xs font-bold">Todas as {matchingBills.length} Contas</span>
+                        <span className="text-[9px] opacity-80 leading-tight">Mudar todas as iguais</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setUpdateScope('future')}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-0.5 ${
+                          updateScope === 'future'
+                            ? 'bg-amber-500 text-slate-950 font-extrabold border-amber-400 shadow-md'
+                            : 'bg-[#141416] text-white/70 border-white/10 hover:border-white/20'
+                        }`}
+                      >
+                        <span className="text-xs font-bold">Esta e as Próximas</span>
+                        <span className="text-[9px] opacity-80 leading-tight">A partir deste mês</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setUpdateScope('single')}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-0.5 ${
+                          updateScope === 'single'
+                            ? 'bg-amber-500 text-slate-950 font-extrabold border-amber-400 shadow-md'
+                            : 'bg-[#141416] text-white/70 border-white/10 hover:border-white/20'
+                        }`}
+                      >
+                        <span className="text-xs font-bold">Apenas Esta Conta</span>
+                        <span className="text-[9px] opacity-80 leading-tight">Somente este registro</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                <input
-                  type="checkbox"
-                  checked={isPaid}
-                  onChange={(e) => setIsPaid(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-10 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950 peer-checked:after:border-slate-950"></div>
-              </label>
-            </div>
+            )}
 
           </div>
 
