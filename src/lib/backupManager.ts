@@ -455,7 +455,15 @@ export function restoreFullBackupFromJSON(rawJson: string): {
   error?: string;
 } {
   try {
-    const parsed = JSON.parse(rawJson);
+    const trimmed = rawJson ? rawJson.trim() : '';
+    if (trimmed.startsWith('PK') || trimmed.startsWith('PK\x03\x04') || trimmed.startsWith('PK\x05\x06')) {
+      return {
+        success: false,
+        error: 'O arquivo selecionado é um arquivo compactado (ZIP). Por favor, selecione o arquivo de backup em formato JSON (.json) gerado pelo aplicativo.'
+      };
+    }
+
+    const parsed = JSON.parse(trimmed);
     if (!parsed || typeof parsed !== 'object') {
       return { success: false, error: 'Arquivo JSON inválido ou vazio.' };
     }
@@ -532,9 +540,16 @@ export function restoreFullBackupFromJSON(rawJson: string): {
       },
     };
   } catch (err: any) {
+    const msg = err?.message || '';
+    if (msg.includes('JSON') || msg.includes('Unexpected token')) {
+      return {
+        success: false,
+        error: 'O arquivo selecionado não é um arquivo JSON válido. Certifique-se de selecionar o arquivo de backup correto (.json).'
+      };
+    }
     return {
       success: false,
-      error: err?.message || 'Falha ao interpretar arquivo de backup.',
+      error: 'Falha ao interpretar arquivo de backup: ' + msg,
     };
   }
 }
