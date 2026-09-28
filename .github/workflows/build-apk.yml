@@ -52,6 +52,42 @@ jobs:
         run: |
           node generate-android-assets.cjs
 
+      - name: Decodificar Keystore Fixa a partir do Segredo
+        run: |
+          echo "Tamanho do segredo (deve ser próximo de 3664):"
+          echo -n "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | wc -c
+          if [ -n "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 -d > release.keystore
+            echo "✅ release.keystore decodificado a partir do segredo DEBUG_KEYSTORE_BASE64"
+            ls -la release.keystore
+          else
+            echo "⚠️ Segredo DEBUG_KEYSTORE_BASE64 não encontrado — build vai usar assinatura aleatória"
+          fi
+
+      - name: Configurar Keystore Fixo para Assinatura Consistente
+        run: |
+          mkdir -p ~/.android
+          if [ -f "release.keystore" ]; then
+            cp release.keystore ~/.android/debug.keystore
+            echo "✅ Keystore fixo configurado em ~/.android/debug.keystore (garante mesma assinatura em todos os builds)"
+          fi
+
+      - name: Forçar signingConfig do App para Usar o Keystore Fixo
+        run: |
+          if grep -q "android.signingConfigs.debug.storeFile" android/app/build.gradle; then
+            echo "ℹ️ signingConfig já estava forçado — nada a fazer"
+            exit 0
+          fi
+          cat >> android/app/build.gradle << 'EOF'
+
+          android.signingConfigs.debug.storeFile = new File(System.getProperty("user.home") + "/.android/debug.keystore")
+          android.signingConfigs.debug.storePassword = "android"
+          android.signingConfigs.debug.keyAlias = "androiddebugkey"
+          android.signingConfigs.debug.keyPassword = "android"
+          android.buildTypes.debug.signingConfig = android.signingConfigs.debug
+          EOF
+          echo "✅ signingConfig do buildType debug forçado a usar ~/.android/debug.keystore"
+
       - name: Grant Execute Permission for Gradlew
         run: |
           cd android
@@ -61,6 +97,18 @@ jobs:
         run: |
           cd android
           ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Verificar Fingerprint da Assinatura do APK
+        continue-on-error: true
+        run: |
+          APK=$(ls android/app/build/outputs/apk/debug/*.apk | head -1)
+          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          echo "=== Fingerprint da assinatura deste APK (compare entre builds) ==="
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner nao encontrado - pulando verificacao"
+            exit 0
+          fi
+          "$APKSIGNER" verify --print-certs "$APK" | grep -i "SHA-256\|SHA-1"
 
       - name: Upload APK as Artifact
         uses: actions/upload-artifact@v4
