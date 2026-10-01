@@ -98,6 +98,50 @@ async function generateAssets() {
   fs.writeFileSync(stringsXmlPath, stringsXmlContent, 'utf8');
   console.log('Updated strings.xml with app_name: "Controle Financeiro"');
 
+  // 2c. Ensure AndroidManifest.xml has all required permissions (Notifications, Camera, Contacts, Nearby, Media, Location, Mic, Call Log)
+  const manifestPath = path.join(__dirname, 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
+  if (fs.existsSync(manifestPath)) {
+    let manifestContent = fs.readFileSync(manifestPath, 'utf8');
+    const requiredPermissions = [
+      'android.permission.INTERNET',
+      'android.permission.POST_NOTIFICATIONS',
+      'android.permission.CAMERA',
+      'android.permission.RECORD_AUDIO',
+      'android.permission.ACCESS_FINE_LOCATION',
+      'android.permission.ACCESS_COARSE_LOCATION',
+      'android.permission.READ_CONTACTS',
+      'android.permission.WRITE_CONTACTS',
+      'android.permission.BLUETOOTH',
+      'android.permission.BLUETOOTH_ADMIN',
+      'android.permission.BLUETOOTH_CONNECT',
+      'android.permission.BLUETOOTH_SCAN',
+      'android.permission.READ_EXTERNAL_STORAGE',
+      'android.permission.WRITE_EXTERNAL_STORAGE',
+      'android.permission.READ_MEDIA_IMAGES',
+      'android.permission.READ_MEDIA_AUDIO',
+      'android.permission.READ_MEDIA_VIDEO',
+      'android.permission.READ_CALL_LOG',
+      'android.permission.WRITE_CALL_LOG',
+      'android.permission.VIBRATE',
+      'android.permission.RECEIVE_BOOT_COMPLETED',
+      'android.permission.SCHEDULE_EXACT_ALARM'
+    ];
+    let added = false;
+    for (const perm of requiredPermissions) {
+      if (!manifestContent.includes(perm)) {
+        manifestContent = manifestContent.replace(
+          '</manifest>',
+          `    <uses-permission android:name="${perm}" />\n</manifest>`
+        );
+        added = true;
+      }
+    }
+    if (added) {
+      fs.writeFileSync(manifestPath, manifestContent, 'utf8');
+      console.log('Added all requested permissions (Notifications, Camera, Contacts, Nearby, Media, Location, Mic, Call Log) to AndroidManifest.xml');
+    }
+  }
+
   // 3. Launcher mipmaps configurations
   // Adaptive foreground needs ~15% inset so it does not get cropped by circular masks
   const mipmapSizes = [

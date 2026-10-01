@@ -4,11 +4,19 @@ on:
   push:
     branches: [main, master]
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Criar GitHub Release com APK para download direto no celular'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   build-apk:
     name: Build & Package APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
@@ -22,12 +30,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
 
       - name: Setup Java JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Accept Android SDK Licenses
         run: |
@@ -80,12 +92,12 @@ jobs:
           fi
           cat >> android/app/build.gradle << 'EOF'
 
-          android.signingConfigs.debug.storeFile = new File(System.getProperty("user.home") + "/.android/debug.keystore")
-          android.signingConfigs.debug.storePassword = "android"
-          android.signingConfigs.debug.keyAlias = "androiddebugkey"
-          android.signingConfigs.debug.keyPassword = "android"
-          android.buildTypes.debug.signingConfig = android.signingConfigs.debug
-          EOF
+android.signingConfigs.debug.storeFile = new File(System.getProperty("user.home") + "/.android/debug.keystore")
+android.signingConfigs.debug.storePassword = "android"
+android.signingConfigs.debug.keyAlias = "androiddebugkey"
+android.signingConfigs.debug.keyPassword = "android"
+android.buildTypes.debug.signingConfig = android.signingConfigs.debug
+EOF
           echo "✅ signingConfig do buildType debug forçado a usar ~/.android/debug.keystore"
 
       - name: Grant Execute Permission for Gradlew
@@ -110,9 +122,41 @@ jobs:
           fi
           "$APKSIGNER" verify --print-certs "$APK" | grep -i "SHA-256\|SHA-1"
 
+      - name: Prepare APK for Distribution
+        run: |
+          mkdir -p release-artifacts
+          cp android/app/build/outputs/apk/debug/app-debug.apk release-artifacts/Controle-Financeiro.apk
+          echo "APK gerado com sucesso:"
+          ls -lh release-artifacts/Controle-Financeiro.apk
+
       - name: Upload APK as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Controle-Financeiro-Debug
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            release-artifacts/Controle-Financeiro.apk
           retention-days: 30
+
+      - name: Create GitHub Release (Download Direto no Celular)
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true') || startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v1.0.{0}', github.run_number) }}
+          name: ${{ format('Controle Financeiro v1.0.{0}', github.run_number) }}
+          body: |
+            ## 📱 Controle Financeiro - Versão Android Pronta para Instalar
+
+            ### 🚀 Como instalar / atualizar no celular:
+            1. Baixe o arquivo **`Controle-Financeiro.apk`** abaixo diretamente pelo navegador do celular.
+            2. Toque no arquivo baixado para abrir.
+            3. Como a assinatura (Keystore) é consistente, as novas versões atualizam o aplicativo sem perda de dados!
+            4. Se o Android perguntar, confirme a permissão para atualizar/instalar.
+
+            ---
+            *Build com assinatura consistente gerado pelo GitHub Actions (Execução #${{ github.run_number }}).*
+          files: release-artifacts/Controle-Financeiro.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
