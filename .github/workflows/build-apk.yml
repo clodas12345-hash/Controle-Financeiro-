@@ -43,7 +43,10 @@ jobs:
 
       - name: Accept Android SDK Licenses
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || yes | sdkmanager --licenses 2>/dev/null || true
+          set +e
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
+          yes | sdkmanager --licenses 2>/dev/null || true
+          exit 0
 
       - name: Install Node Dependencies
         run: |
@@ -64,33 +67,37 @@ jobs:
         run: |
           node generate-android-assets.cjs
 
-      - name: Decodificar Keystore Fixa a partir do Segredo
-        run: |
-          echo "Tamanho do segredo (deve ser próximo de 3664):"
-          echo -n "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | wc -c
-          if [ -n "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" ]; then
-            echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 -d > release.keystore
-            echo "✅ release.keystore decodificado a partir do segredo DEBUG_KEYSTORE_BASE64"
-            ls -la release.keystore
-          else
-            echo "⚠️ Segredo DEBUG_KEYSTORE_BASE64 não encontrado — build vai usar assinatura aleatória"
-          fi
-
-      - name: Configurar Keystore Fixo para Assinatura Consistente
+      - name: Decodificar ou Gerar Keystore de Assinatura
         run: |
           mkdir -p ~/.android
-          if [ -f "release.keystore" ]; then
-            cp release.keystore ~/.android/debug.keystore
-            echo "✅ Keystore fixo configurado em ~/.android/debug.keystore (garante mesma assinatura em todos os builds)"
+          SECRET_BASE64="${{ secrets.DEBUG_KEYSTORE_BASE64 }}"
+          if [ -n "$SECRET_BASE64" ]; then
+            echo "$SECRET_BASE64" | tr -d '[:space:]' | base64 -d > release.keystore 2>/dev/null || true
+            if [ -s "release.keystore" ]; then
+              cp release.keystore ~/.android/debug.keystore
+              echo "✅ Keystore decodificado a partir do segredo DEBUG_KEYSTORE_BASE64"
+            else
+              echo "⚠️ Segredo inválido ou vazio, gerando keystore padrão..."
+              rm -f release.keystore
+            fi
           fi
+          
+          if [ ! -f "~/.android/debug.keystore" ] && [ ! -f "release.keystore" ]; then
+            echo "ℹ️ Gerando keystore padrão de debug automaticamente..."
+            keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
+          elif [ -f "release.keystore" ]; then
+            cp release.keystore ~/.android/debug.keystore
+          fi
+          ls -la ~/.android/debug.keystore || true
 
       - name: Forçar signingConfig do App para Usar o Keystore Fixo
         run: |
-          if grep -q "android.signingConfigs.debug.storeFile" android/app/build.gradle; then
-            echo "ℹ️ signingConfig já estava forçado — nada a fazer"
-            exit 0
-          fi
-          cat >> android/app/build.gradle << 'EOF'
+          BUILD_GRADLE="android/app/build.gradle"
+          if [ -f "$BUILD_GRADLE" ]; then
+            if grep -q "android.signingConfigs.debug.storeFile" "$BUILD_GRADLE"; then
+              echo "ℹ️ signingConfig já estava configurado"
+            else
+              cat >> "$BUILD_GRADLE" << 'EOF'
 
 android.signingConfigs.debug.storeFile = new File(System.getProperty("user.home") + "/.android/debug.keystore")
 android.signingConfigs.debug.storePassword = "android"
@@ -98,7 +105,11 @@ android.signingConfigs.debug.keyAlias = "androiddebugkey"
 android.signingConfigs.debug.keyPassword = "android"
 android.buildTypes.debug.signingConfig = android.signingConfigs.debug
 EOF
-          echo "✅ signingConfig do buildType debug forçado a usar ~/.android/debug.keystore"
+              echo "✅ signingConfig do buildType debug configurado com sucesso"
+            fi
+          else
+            echo "⚠️ android/app/build.gradle não encontrado"
+          fi
 
       - name: Grant Execute Permission for Gradlew
         run: |
@@ -113,29 +124,37 @@ EOF
       - name: Verificar Fingerprint da Assinatura do APK
         continue-on-error: true
         run: |
-          APK=$(ls android/app/build/outputs/apk/debug/*.apk | head -1)
-          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
-          echo "=== Fingerprint da assinatura deste APK (compare entre builds) ==="
-          if [ -z "$APKSIGNER" ]; then
-            echo "apksigner nao encontrado - pulando verificacao"
+          APK=$(ls android/app/build/outputs/apk/debug/*.apk 2>/dev/null | head -1)
+          if [ -z "$APK" ]; then
+            echo "APK não encontrado"
             exit 0
           fi
-          "$APKSIGNER" verify --print-certs "$APK" | grep -i "SHA-256\|SHA-1"
+          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          echo "=== Fingerprint da assinatura deste APK ==="
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner não encontrado - pulando verificação"
+            exit 0
+          fi
+          "$APKSIGNER" verify --print-certs "$APK" | grep -i "SHA-256\|SHA-1" || true
 
       - name: Prepare APK for Distribution
         run: |
           mkdir -p release-artifacts
-          cp android/app/build/outputs/apk/debug/app-debug.apk release-artifacts/Controle-Financeiro.apk
-          echo "APK gerado com sucesso:"
-          ls -lh release-artifacts/Controle-Financeiro.apk
+          APK_SRC=$(ls android/app/build/outputs/apk/debug/*.apk 2>/dev/null | head -1)
+          if [ -n "$APK_SRC" ]; then
+            cp "$APK_SRC" release-artifacts/Controle-Financeiro.apk
+            echo "✅ APK pronto em release-artifacts/Controle-Financeiro.apk"
+            ls -lh release-artifacts/Controle-Financeiro.apk
+          else
+            echo "❌ Nenhum APK encontrado para copiar"
+            exit 1
+          fi
 
       - name: Upload APK as Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Controle-Financeiro-Debug
-          path: |
-            android/app/build/outputs/apk/debug/*.apk
-            release-artifacts/Controle-Financeiro.apk
+          name: Controle-Financeiro-APK
+          path: release-artifacts/Controle-Financeiro.apk
           retention-days: 30
 
       - name: Create GitHub Release (Download Direto no Celular)
@@ -150,11 +169,11 @@ EOF
             ### 🚀 Como instalar / atualizar no celular:
             1. Baixe o arquivo **`Controle-Financeiro.apk`** abaixo diretamente pelo navegador do celular.
             2. Toque no arquivo baixado para abrir.
-            3. Como a assinatura (Keystore) é consistente, as novas versões atualizam o aplicativo sem perda de dados!
+            3. Como a assinatura é consistente, as novas versões atualizam o aplicativo sem perda de dados!
             4. Se o Android perguntar, confirme a permissão para atualizar/instalar.
 
             ---
-            *Build com assinatura consistente gerado pelo GitHub Actions (Execução #${{ github.run_number }}).*
+            *Build gerado automaticamente pelo GitHub Actions (Execução #${{ github.run_number }}).*
           files: release-artifacts/Controle-Financeiro.apk
           draft: false
           prerelease: false
