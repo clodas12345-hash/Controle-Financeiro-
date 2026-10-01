@@ -48,6 +48,14 @@ jobs:
           yes | sdkmanager --licenses 2>/dev/null || true
           exit 0
 
+      - name: Install Android SDK Platforms & Build Tools
+        run: |
+          set +e
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+          yes | sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" || true
+          yes | sdkmanager "platforms;android-35" "build-tools;35.0.0" || true
+          exit 0
+
       - name: Install Node Dependencies
         run: |
           npm install --legacy-peer-deps
