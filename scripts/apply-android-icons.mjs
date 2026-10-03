@@ -3,11 +3,12 @@ import path from 'path';
 
 function findLogoSource() {
   const candidates = [
-    path.resolve('public', 'icon2.png'),
-    path.resolve('public', 'ic_stat_icon.png'),
     path.resolve('public', 'logo.png'),
     path.resolve('public', 'converted_image (1).png'),
-    path.resolve('public', 'logo.jpg')
+    path.resolve('public', 'logo.jpg'),
+    path.resolve('public', 'icon.png'),
+    path.resolve('public', 'app_icon.png'),
+    path.resolve('public', 'icon2.png')
   ];
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
@@ -18,6 +19,8 @@ function findLogoSource() {
 async function generateIcons() {
   const iconSrc = findLogoSource();
   const resDir = path.resolve('android', 'app', 'src', 'main', 'res');
+
+  console.log('🎨 Generating Android icons using source:', iconSrc);
 
   if (!fs.existsSync(iconSrc)) {
     console.error('Source icon not found:', iconSrc);
@@ -45,6 +48,7 @@ async function generateIcons() {
     console.log('Sharp not installed, will use fallback copying.');
   }
 
+  // 1. Launcher Mipmaps
   for (const item of sizes) {
     const targetFolder = path.join(resDir, item.dir);
     if (!fs.existsSync(targetFolder)) {
@@ -73,14 +77,14 @@ async function generateIcons() {
     }
   }
 
-  // Generate pure white monochrome silhouette notification icon (ic_stat_icon.png)
+  // 2. Notification Drawables (Silhouette smallIcon + Full Color largeIcon)
   const statIconSizes = [
-    { dir: 'drawable', size: 24 },
-    { dir: 'drawable-mdpi', size: 24 },
-    { dir: 'drawable-hdpi', size: 36 },
-    { dir: 'drawable-xhdpi', size: 48 },
-    { dir: 'drawable-xxhdpi', size: 72 },
-    { dir: 'drawable-xxxhdpi', size: 96 }
+    { dir: 'drawable', size: 48, largeSize: 192 },
+    { dir: 'drawable-mdpi', size: 24, largeSize: 48 },
+    { dir: 'drawable-hdpi', size: 36, largeSize: 72 },
+    { dir: 'drawable-xhdpi', size: 48, largeSize: 96 },
+    { dir: 'drawable-xxhdpi', size: 72, largeSize: 144 },
+    { dir: 'drawable-xxxhdpi', size: 96, largeSize: 192 }
   ];
 
   for (const item of statIconSizes) {
@@ -88,7 +92,20 @@ async function generateIcons() {
     if (!fs.existsSync(targetFolder)) {
       fs.mkdirSync(targetFolder, { recursive: true });
     }
+
     if (sharp) {
+      // Full color large icon for notification body
+      await sharp(iconSrc)
+        .resize(item.largeSize, item.largeSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png()
+        .toFile(path.join(targetFolder, 'ic_stat_large_icon.png'));
+
+      await sharp(iconSrc)
+        .resize(item.largeSize, item.largeSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png()
+        .toFile(path.join(targetFolder, 'ic_launcher.png'));
+
+      // Pure white monochrome silhouette for status bar / smallIcon
       const resized = await sharp(iconSrc)
         .resize(item.size, item.size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
         .ensureAlpha()
@@ -144,9 +161,12 @@ async function generateIcons() {
         .toFile(path.join(targetFolder, 'ic_stat_icon.png'));
     } else {
       fs.copyFileSync(iconSrc, path.join(targetFolder, 'ic_stat_icon.png'));
+      fs.copyFileSync(iconSrc, path.join(targetFolder, 'ic_stat_large_icon.png'));
+      fs.copyFileSync(iconSrc, path.join(targetFolder, 'ic_launcher.png'));
     }
   }
 
+  // 3. Splash Screens
   const drawableDirs = ['drawable', 'drawable-land-hdpi', 'drawable-land-mdpi', 'drawable-land-xhdpi', 'drawable-land-xxhdpi', 'drawable-land-xxxhdpi', 'drawable-port-hdpi', 'drawable-port-mdpi', 'drawable-port-xhdpi', 'drawable-port-xxhdpi', 'drawable-port-xxxhdpi'];
   for (const d of drawableDirs) {
     const dPath = path.join(resDir, d);
@@ -155,7 +175,7 @@ async function generateIcons() {
     }
   }
 
-  console.log('✅ Android icons & monochrome silhouette notification icons successfully injected!');
+  console.log('✅ Android icons, status smallIcon, and largeIcon generated successfully!');
 }
 
 generateIcons().catch(console.error);

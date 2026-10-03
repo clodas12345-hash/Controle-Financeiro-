@@ -32,6 +32,8 @@ export async function sendAppNotification(title: string, options?: { body?: stri
             body: options?.body || '',
             id: options?.id || Math.floor(Math.random() * 1000000) + 1,
             smallIcon: 'ic_stat_icon',
+            largeIcon: 'ic_stat_large_icon',
+            iconColor: '#34d399',
             sound: 'default'
           }
         ]
@@ -44,7 +46,8 @@ export async function sendAppNotification(title: string, options?: { body?: stri
     try {
       new Notification(title, {
         body: options?.body || '',
-        icon: '/logo.png'
+        icon: '/logo.png',
+        badge: '/logo.png',
       });
     } catch (webErr) {
       console.warn('Web Notification falhou:', webErr);
