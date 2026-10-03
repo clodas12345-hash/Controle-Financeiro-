@@ -106,14 +106,7 @@ jobs:
             if grep -q "android.signingConfigs.debug.storeFile" "$BUILD_GRADLE"; then
               echo "ℹ️ signingConfig já estava configurado"
             else
-              cat >> "$BUILD_GRADLE" << 'EOF'
-
-android.signingConfigs.debug.storeFile = new File(System.getProperty("user.home") + "/.android/debug.keystore")
-android.signingConfigs.debug.storePassword = "android"
-android.signingConfigs.debug.keyAlias = "androiddebugkey"
-android.signingConfigs.debug.keyPassword = "android"
-android.buildTypes.debug.signingConfig = android.signingConfigs.debug
-EOF
+              printf "\nandroid.signingConfigs.debug.storeFile = new File(System.getProperty(\"user.home\") + \"/.android/debug.keystore\")\nandroid.signingConfigs.debug.storePassword = \"android\"\nandroid.signingConfigs.debug.keyAlias = \"androiddebugkey\"\nandroid.signingConfigs.debug.keyPassword = \"android\"\nandroid.buildTypes.debug.signingConfig = android.signingConfigs.debug\n" >> "$BUILD_GRADLE"
               echo "✅ signingConfig do buildType debug configurado com sucesso"
             fi
           else
