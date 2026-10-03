@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Bill, Transaction } from '../types';
 import { formatBRL, formatDateBR, getTodayStr, getDueDateBusinessInfo, getEffectiveDueDate } from '../lib/storage';
+import { sendAppNotification } from '../lib/notifications';
 
 interface DueBillsAlertModalProps {
   bills: Bill[];
@@ -184,6 +185,11 @@ export const DueBillsAlertModal: React.FC<DueBillsAlertModalProps> = ({
           playNotificationSound(currentSound);
         }, 300);
       }
+
+      sendAppNotification('🔔 Lembrete de Contas a Pagar', {
+        body: `Você possui ${totalDueItems} conta(s) pendente(s) com vencimento para hoje ou atrasada(s).`,
+        id: 101,
+      });
     }
   }, [todayStr, totalDueItems]);
 

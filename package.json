@@ -10,7 +10,8 @@
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.cjs",
     "lint": "tsc --noEmit",
-    "build:android": "npm run build:web && npx cap sync android && node generate-android-assets.cjs",
+    "build:android": "npm run build:web && npx cap sync android && node generate-android-assets.cjs && node scripts/apply-android-icons.mjs",
+    "build:icons": "node scripts/apply-android-icons.mjs",
     "cap:add": "npx cap add android",
     "cap:sync": "npx cap sync android",
     "cap:open": "npx cap open android"

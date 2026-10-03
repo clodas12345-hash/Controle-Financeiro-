@@ -74,6 +74,7 @@ jobs:
       - name: Apply Custom GKD Logo & App Assets
         run: |
           node generate-android-assets.cjs
+          node scripts/apply-android-icons.mjs
 
       - name: Decodificar ou Gerar Keystore de Assinatura
         run: |

@@ -32,6 +32,7 @@ import {
 } from '../lib/backupManager';
 import { exportAppToExcel } from '../lib/excelExport';
 import { loadAllAppData } from '../lib/storage';
+import { sendAppNotification } from '../lib/notifications';
 
 interface BackupModalProps {
   isOpen: boolean;
@@ -82,6 +83,10 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       // Also update restore points
       saveAutomaticRestorePoint(appData, 'Backup Manual Exportado');
       setRestorePoints(getAutomaticRestorePoints());
+
+      sendAppNotification('📦 Backup Concluído!', {
+        body: `Arquivo exportado com sucesso contendo ${res.totalRecords} registros.`,
+      });
     } catch (err: any) {
       setStatus({
         type: 'error',
@@ -99,6 +104,9 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       setStatus({
         type: 'success',
         message: 'Planilha Excel gerada! Se estiver no celular, você pode salvá-la ou abri-la no WhatsApp ou Google Drive.',
+      });
+      sendAppNotification('📊 Planilha Excel Gerada!', {
+        body: 'Relatório financeiro exportado em formato Excel com sucesso.',
       });
     } catch (err: any) {
       setStatus({
@@ -151,6 +159,9 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           type: 'success',
           message: `Backup restaurado com sucesso! ${res.restoredSummary?.total || 0} registros foram restaurados.`,
         });
+        sendAppNotification('🔄 Backup Restaurado com Sucesso!', {
+          body: `${res.restoredSummary?.total || 0} registros recuperados no aplicativo.`,
+        });
       } else {
         setStatus({
           type: 'error',
@@ -189,6 +200,9 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         type: 'success',
         message: `Backup restaurado com sucesso! ${res.restoredSummary?.total || 0} registros recuperados.`,
       });
+      sendAppNotification('🔄 Backup Restaurado com Sucesso!', {
+        body: `${res.restoredSummary?.total || 0} registros recuperados no aplicativo.`,
+      });
     } else {
       setStatus({
         type: 'error',
@@ -210,6 +224,9 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       setStatus({
         type: 'success',
         message: 'Ponto de restauração aplicado com sucesso!',
+      });
+      sendAppNotification('🔄 Ponto de Restauração Aplicado!', {
+        body: 'Dados anteriores recuperados com sucesso.',
       });
     } else {
       setStatus({

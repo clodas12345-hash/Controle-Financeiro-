@@ -23,6 +23,7 @@ import {
 } from './lib/storage';
 import { exportAppToExcel } from './lib/excelExport';
 import { downloadFullBackupImmediately, restoreFullBackupFromJSON, saveAutomaticRestorePoint } from './lib/backupManager';
+import { sendAppNotification } from './lib/notifications';
 import {
   Transaction,
   Bill,
@@ -379,6 +380,33 @@ export default function App() {
           id: targetTxId,
         };
         updatedTransactions = [tx, ...updatedTransactions];
+
+        // Notify user about newly registered transaction
+        const isRevenue = txData.type === 'receita';
+        sendAppNotification(
+          isRevenue ? '💰 Nova Receita Registrada!' : '💸 Nova Despesa Registrada!',
+          {
+            body: `${txData.description} — ${formatBRL(txData.amount)}`,
+          }
+        );
+
+        // Check if daily revenue goal was achieved
+        if (isRevenue) {
+          const today = getTodayStr();
+          const prevTodayTotal = (prev.transactions || [])
+            .filter((t) => t.type === 'receita' && t.date === today)
+            .reduce((sum, t) => sum + t.amount, 0);
+          const newTodayTotal = prevTodayTotal + txData.amount;
+          const dailyGoal = Number(localStorage.getItem('fin_control_daily_goal') || 300);
+          if (prevTodayTotal < dailyGoal && newTodayTotal >= dailyGoal) {
+            setTimeout(() => {
+              sendAppNotification('🎯 Meta Diária Atingida!', {
+                body: `Parabéns! Você alcançou ${formatBRL(newTodayTotal)} em faturamento hoje (Meta: ${formatBRL(dailyGoal)}).`,
+                id: 999,
+              });
+            }, 1200);
+          }
+        }
       }
 
       // Ensure bill sync if it's a house or car expense
@@ -713,6 +741,10 @@ export default function App() {
             paymentMethod: bill.paymentMethod,
             paid: true,
             excludeFromTotals: bill.excludeFromTotals,
+          });
+
+          sendAppNotification('✅ Conta Paga com Sucesso!', {
+            body: `${bill.title} (${formatBRL(bill.amount)}) foi marcada como quitada.`,
           });
         } else if (!isNowPaid && txIndex >= 0) {
           updatedTransactions.splice(txIndex, 1);

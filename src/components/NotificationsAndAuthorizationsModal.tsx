@@ -23,6 +23,7 @@ import {
 import { playNotificationSound, SOUND_OPTIONS, SoundOptionKey } from './DueBillsAlertModal';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { requestNotificationPermission, sendAppNotification } from '../lib/notifications';
 
 interface NotificationsAndAuthorizationsModalProps {
   isOpen: boolean;
@@ -129,37 +130,15 @@ export const NotificationsAndAuthorizationsModal: React.FC<NotificationsAndAutho
   }, [isOpen]);
 
   const handleRequestNotificationPermission = async () => {
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const permStatus = await LocalNotifications.requestPermissions();
-        if (permStatus.display === 'granted') {
-          setNotificationPermission('granted');
-          await LocalNotifications.schedule({
-            notifications: [
-              {
-                title: 'Controle Financeiro',
-                body: 'Notificações ativadas com sucesso! Você será avisado de suas contas.',
-                id: 1,
-                schedule: { at: new Date(Date.now() + 1000) },
-              }
-            ]
-          });
-        } else {
-          setNotificationPermission('denied');
-        }
-      } catch (e) {
-        console.error('Failed to request notification permission', e);
-      }
+    const granted = await requestNotificationPermission();
+    if (granted) {
+      setNotificationPermission('granted');
+      await sendAppNotification('Controle Financeiro', {
+        body: 'Notificações ativadas com sucesso! Você receberá alertas das suas contas.',
+        id: 1001,
+      });
     } else {
-      if ('Notification' in window) {
-        const perm = await Notification.requestPermission();
-        setNotificationPermission(perm);
-        if (perm === 'granted') {
-          new Notification('Controle Financeiro', {
-            body: 'Notificações ativadas com sucesso! Você será avisado de suas contas.',
-          });
-        }
-      }
+      setNotificationPermission('denied');
     }
   };
 
