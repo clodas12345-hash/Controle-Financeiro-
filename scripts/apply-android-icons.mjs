@@ -7,8 +7,7 @@ function findLogoSource() {
     path.resolve('public', 'converted_image (1).png'),
     path.resolve('public', 'logo.jpg'),
     path.resolve('public', 'icon.png'),
-    path.resolve('public', 'app_icon.png'),
-    path.resolve('public', 'icon2.png')
+    path.resolve('public', 'app_icon.png')
   ];
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
@@ -20,7 +19,7 @@ async function generateIcons() {
   const iconSrc = findLogoSource();
   const resDir = path.resolve('android', 'app', 'src', 'main', 'res');
 
-  console.log('🎨 Generating Android icons using source:', iconSrc);
+  console.log('🎨 Generating Android icons with safe padding from source:', iconSrc);
 
   if (!fs.existsSync(iconSrc)) {
     console.error('Source icon not found:', iconSrc);
@@ -48,7 +47,7 @@ async function generateIcons() {
     console.log('Sharp not installed, will use fallback copying.');
   }
 
-  // 1. Launcher Mipmaps
+  // 1. Launcher Mipmaps with safe zone padding (anti-zoom / anti-crop)
   for (const item of sizes) {
     const targetFolder = path.join(resDir, item.dir);
     if (!fs.existsSync(targetFolder)) {
@@ -56,18 +55,59 @@ async function generateIcons() {
     }
 
     if (sharp) {
-      await sharp(iconSrc)
-        .resize(item.size, item.size, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+      // 70% safe zone inner size so the logo never touches edges or gets cropped by Android circle masks
+      const innerSize = Math.round(item.size * 0.72);
+      const innerLogo = await sharp(iconSrc)
+        .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+        .png()
+        .toBuffer();
+
+      // Standard square icon on white background
+      await sharp({
+        create: {
+          width: item.size,
+          height: item.size,
+          channels: 4,
+          background: { r: 255, g: 255, b: 255, alpha: 1 }
+        }
+      })
+        .composite([{ input: innerLogo, gravity: 'center' }])
         .png()
         .toFile(path.join(targetFolder, 'ic_launcher.png'));
 
-      await sharp(iconSrc)
-        .resize(item.size, item.size, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+      // Round icon with circular white background
+      const circleSvg = Buffer.from(
+        `<svg width="${item.size}" height="${item.size}"><circle cx="${item.size / 2}" cy="${item.size / 2}" r="${item.size / 2}" fill="#ffffff"/></svg>`
+      );
+      const roundBg = await sharp({
+        create: {
+          width: item.size,
+          height: item.size,
+          channels: 4,
+          background: { r: 255, g: 255, b: 255, alpha: 1 }
+        }
+      })
+        .composite([{ input: innerLogo, gravity: 'center' }])
+        .composite([{ input: circleSvg, blend: 'dest-in' }])
         .png()
         .toFile(path.join(targetFolder, 'ic_launcher_round.png'));
 
-      await sharp(iconSrc)
-        .resize(item.fgSize, item.fgSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+      // Adaptive icon foreground (safe zone centered on transparent background)
+      const innerFgSize = Math.round(item.fgSize * 0.62);
+      const innerFgLogo = await sharp(iconSrc)
+        .resize(innerFgFgSize => innerFgSize, innerFgSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png()
+        .toBuffer();
+
+      await sharp({
+        create: {
+          width: item.fgSize,
+          height: item.fgSize,
+          channels: 4,
+          background: { r: 0, g: 0, b: 0, alpha: 0 }
+        }
+      })
+        .composite([{ input: innerFgLogo, gravity: 'center' }])
         .png()
         .toFile(path.join(targetFolder, 'ic_launcher_foreground.png'));
     } else {
@@ -77,14 +117,14 @@ async function generateIcons() {
     }
   }
 
-  // 2. Notification Drawables (Silhouette smallIcon + Full Color largeIcon)
+  // 2. Notification Drawables (Monochrome status bar icon)
   const statIconSizes = [
-    { dir: 'drawable', size: 48, largeSize: 192 },
-    { dir: 'drawable-mdpi', size: 24, largeSize: 48 },
-    { dir: 'drawable-hdpi', size: 36, largeSize: 72 },
-    { dir: 'drawable-xhdpi', size: 48, largeSize: 96 },
-    { dir: 'drawable-xxhdpi', size: 72, largeSize: 144 },
-    { dir: 'drawable-xxxhdpi', size: 96, largeSize: 192 }
+    { dir: 'drawable', size: 48 },
+    { dir: 'drawable-mdpi', size: 24 },
+    { dir: 'drawable-hdpi', size: 36 },
+    { dir: 'drawable-xhdpi', size: 48 },
+    { dir: 'drawable-xxhdpi', size: 72 },
+    { dir: 'drawable-xxxhdpi', size: 96 }
   ];
 
   for (const item of statIconSizes) {
@@ -94,20 +134,10 @@ async function generateIcons() {
     }
 
     if (sharp) {
-      // Full color large icon for notification body
-      await sharp(iconSrc)
-        .resize(item.largeSize, item.largeSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-        .png()
-        .toFile(path.join(targetFolder, 'ic_stat_large_icon.png'));
-
-      await sharp(iconSrc)
-        .resize(item.largeSize, item.largeSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-        .png()
-        .toFile(path.join(targetFolder, 'ic_launcher.png'));
-
       // Pure white monochrome silhouette for status bar / smallIcon
+      const innerSize = Math.round(item.size * 0.78);
       const resized = await sharp(iconSrc)
-        .resize(item.size, item.size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .resize(innerSize, innerSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
         .ensureAlpha()
         .toBuffer();
 
@@ -156,13 +186,23 @@ async function generateIcons() {
         }
       }
 
-      await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+      const statBuffer = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+        .png()
+        .toBuffer();
+
+      await sharp({
+        create: {
+          width: item.size,
+          height: item.size,
+          channels: 4,
+          background: { r: 0, g: 0, b: 0, alpha: 0 }
+        }
+      })
+        .composite([{ input: statBuffer, gravity: 'center' }])
         .png()
         .toFile(path.join(targetFolder, 'ic_stat_icon.png'));
     } else {
       fs.copyFileSync(iconSrc, path.join(targetFolder, 'ic_stat_icon.png'));
-      fs.copyFileSync(iconSrc, path.join(targetFolder, 'ic_stat_large_icon.png'));
-      fs.copyFileSync(iconSrc, path.join(targetFolder, 'ic_launcher.png'));
     }
   }
 
@@ -175,7 +215,7 @@ async function generateIcons() {
     }
   }
 
-  console.log('✅ Android icons, status smallIcon, and largeIcon generated successfully!');
+  console.log('✅ Android icons with perfect padding generated successfully!');
 }
 
 generateIcons().catch(console.error);

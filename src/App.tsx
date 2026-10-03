@@ -23,7 +23,7 @@ import {
 } from './lib/storage';
 import { exportAppToExcel } from './lib/excelExport';
 import { downloadFullBackupImmediately, restoreFullBackupFromJSON, saveAutomaticRestorePoint } from './lib/backupManager';
-import { sendAppNotification } from './lib/notifications';
+import { sendAppNotification, syncDueBillsRecurringReminders } from './lib/notifications';
 import {
   Transaction,
   Bill,
@@ -302,6 +302,38 @@ export default function App() {
   useEffect(() => {
     saveAllAppData(data);
   }, [data]);
+
+  // Synchronize 2-hour recurring notifications for unpaid due bills
+  useEffect(() => {
+    const todayStr = getTodayStr();
+    const dueBills = (data.bills || []).filter(
+      (b) => (b.status === 'pendente' || b.status === 'atrasado') && getEffectiveDueDate(b.dueDate) <= todayStr && b.paymentMethod !== 'SEM PAGAMENTO'
+    );
+    const dueTx = (data.transactions || []).filter(
+      (t) => t.type === 'despesa' && !t.paid && getEffectiveDueDate(t.date) <= todayStr && !t.id.startsWith('tx_auto_bill_')
+    );
+    const totalDueCount = dueBills.length + dueTx.length;
+    const names = [...dueBills.map((b) => b.title), ...dueTx.map((t) => t.description)];
+
+    // Schedule native background reminders every 2h on Android
+    syncDueBillsRecurringReminders(totalDueCount, names);
+
+    // Foreground / active runtime reminder every 2h
+    const intervalId = setInterval(() => {
+      if (totalDueCount > 0) {
+        const lastSent = Number(localStorage.getItem('fin_control_last_due_reminder_time') || 0);
+        const twoHoursMs = 2 * 60 * 60 * 1000;
+        if (Date.now() - lastSent >= twoHoursMs) {
+          localStorage.setItem('fin_control_last_due_reminder_time', String(Date.now()));
+          sendAppNotification('⏰ Lembrete: Contas a Pagar', {
+            body: `Você possui ${totalDueCount} conta(s) pendente(s) hoje. Marque como paga para pausar os avisos!`,
+          });
+        }
+      }
+    }, 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [data.bills, data.transactions]);
 
   const handleAddVehicle = (newVehicle: Omit<Vehicle, 'id'>) => {
     setData((prev) => ({

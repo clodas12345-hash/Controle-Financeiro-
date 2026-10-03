@@ -167,16 +167,30 @@ async function generateAssets() {
     const targetDir = path.join(RES_DIR, dir);
     if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
-    // Full icon (square / standard)
-    const iconBuf = await sharp(LOGO_SRC)
-      .resize(iconSize, iconSize, { fit: 'cover' })
+    // Inner logo scaled with safe margin (72% size)
+    const innerSize = Math.round(iconSize * 0.72);
+    const innerLogo = await sharp(LOGO_SRC)
+      .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+      .png()
+      .toBuffer();
+
+    // Standard square icon on white background
+    const iconBuf = await sharp({
+      create: {
+        width: iconSize,
+        height: iconSize,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 1 }
+      }
+    })
+      .composite([{ input: innerLogo, gravity: 'center' }])
       .png()
       .toBuffer();
     fs.writeFileSync(path.join(targetDir, 'ic_launcher.png'), iconBuf);
 
-    // Round icon (with circular crop)
+    // Round icon (with circular white crop)
     const circleSvg = Buffer.from(
-      `<svg width="${iconSize}" height="${iconSize}"><circle cx="${iconSize / 2}" cy="${iconSize / 2}" r="${iconSize / 2}" fill="#fff"/></svg>`
+      `<svg width="${iconSize}" height="${iconSize}"><circle cx="${iconSize / 2}" cy="${iconSize / 2}" r="${iconSize / 2}" fill="#ffffff"/></svg>`
     );
     const roundBuf = await sharp(iconBuf)
       .composite([{ input: circleSvg, blend: 'dest-in' }])
@@ -185,9 +199,9 @@ async function generateAssets() {
     fs.writeFileSync(path.join(targetDir, 'ic_launcher_round.png'), roundBuf);
 
     // Foreground icon for adaptive icon (centered with safe zone padding)
-    const innerSize = Math.round(fgSize * 0.72);
-    const innerBuf = await sharp(LOGO_SRC)
-      .resize(innerSize, innerSize, { fit: 'contain', background: { r: 7, g: 21, b: 43, alpha: 0 } })
+    const innerFgSize = Math.round(fgSize * 0.62);
+    const innerFgBuf = await sharp(LOGO_SRC)
+      .resize(innerFgSize, innerFgSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
       .toBuffer();
 
@@ -196,10 +210,10 @@ async function generateAssets() {
         width: fgSize,
         height: fgSize,
         channels: 4,
-        background: { r: 7, g: 21, b: 43, alpha: 0 }
+        background: { r: 0, g: 0, b: 0, alpha: 0 }
       }
     })
-      .composite([{ input: innerBuf, gravity: 'center' }])
+      .composite([{ input: innerFgBuf, gravity: 'center' }])
       .png()
       .toBuffer();
 
