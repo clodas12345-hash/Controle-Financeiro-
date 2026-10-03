@@ -55,7 +55,6 @@ async function generateIcons() {
     }
 
     if (sharp) {
-      // 70% safe zone inner size so the logo never touches edges or gets cropped by Android circle masks
       const innerSize = Math.round(item.size * 0.72);
       const innerLogo = await sharp(iconSrc)
         .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
@@ -92,10 +91,10 @@ async function generateIcons() {
         .png()
         .toFile(path.join(targetFolder, 'ic_launcher_round.png'));
 
-      // Adaptive icon foreground (safe zone centered on transparent background)
+      // Adaptive icon foreground
       const innerFgSize = Math.round(item.fgSize * 0.62);
       const innerFgLogo = await sharp(iconSrc)
-        .resize(innerFgFgSize => innerFgSize, innerFgSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .resize(innerFgSize, innerFgSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
         .png()
         .toBuffer();
 
@@ -117,7 +116,7 @@ async function generateIcons() {
     }
   }
 
-  // 2. Notification Drawables (Monochrome status bar icon)
+  // 2. Pure Transparent Monochrome Notification Icon (Anti-White-Square)
   const statIconSizes = [
     { dir: 'drawable', size: 48 },
     { dir: 'drawable-mdpi', size: 24 },
@@ -134,59 +133,35 @@ async function generateIcons() {
     }
 
     if (sharp) {
-      // Pure white monochrome silhouette for status bar / smallIcon
-      const innerSize = Math.round(item.size * 0.78);
-      const resized = await sharp(iconSrc)
+      const innerSize = Math.round(item.size * 0.82);
+      const { data, info } = await sharp(iconSrc)
         .resize(innerSize, innerSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-        .ensureAlpha()
-        .toBuffer();
-
-      const { data, info } = await sharp(resized)
         .raw()
         .toBuffer({ resolveWithObject: true });
 
-      let hasTransparent = false;
-      for (let i = 3; i < data.length; i += 4) {
-        if (data[i] < 200) {
-          hasTransparent = true;
-          break;
-        }
-      }
-
+      const out = Buffer.alloc(data.length);
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
         const a = data[i + 3];
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
 
-        if (hasTransparent) {
-          if (a > 25) {
-            data[i] = 255;
-            data[i + 1] = 255;
-            data[i + 2] = 255;
-          } else {
-            data[i] = 0;
-            data[i + 1] = 0;
-            data[i + 2] = 0;
-            data[i + 3] = 0;
-          }
+        if (a < 30 || lum < 65) {
+          out[i] = 0;
+          out[i + 1] = 0;
+          out[i + 2] = 0;
+          out[i + 3] = 0;
         } else {
-          const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-          if (luminance > 60) {
-            data[i] = 255;
-            data[i + 1] = 255;
-            data[i + 2] = 255;
-            data[i + 3] = 255;
-          } else {
-            data[i] = 0;
-            data[i + 1] = 0;
-            data[i + 2] = 0;
-            data[i + 3] = 0;
-          }
+          const normAlpha = Math.min(255, Math.round(((lum - 65) / 190) * 255 * (a / 255)));
+          out[i] = 255;
+          out[i + 1] = 255;
+          out[i + 2] = 255;
+          out[i + 3] = normAlpha;
         }
       }
 
-      const statBuffer = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+      const statBuffer = await sharp(out, { raw: { width: info.width, height: info.height, channels: 4 } })
         .png()
         .toBuffer();
 
@@ -215,7 +190,7 @@ async function generateIcons() {
     }
   }
 
-  console.log('✅ Android icons with perfect padding generated successfully!');
+  console.log('✅ Android icons and clean transparent notification icon generated successfully!');
 }
 
 generateIcons().catch(console.error);

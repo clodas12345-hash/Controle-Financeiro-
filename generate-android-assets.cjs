@@ -154,7 +154,6 @@ async function generateAssets() {
   }
 
   // 3. Launcher mipmaps configurations
-  // Adaptive foreground needs ~15% inset so it does not get cropped by circular masks
   const mipmapSizes = [
     { dir: 'mipmap-mdpi', iconSize: 48, fgSize: 108 },
     { dir: 'mipmap-hdpi', iconSize: 72, fgSize: 162 },
@@ -260,83 +259,66 @@ async function generateAssets() {
 
     fs.writeFileSync(path.join(targetDir, 'splash.png'), splashBuf);
   }
-  // 5. Notification drawables (silhouette smallIcon and full color largeIcon)
+
+  // 5. Notification drawables (Pure transparent monochrome silhouette smallIcon)
   const notificationDrawableSizes = [
-    { dir: 'drawable', size: 48, largeSize: 192 },
-    { dir: 'drawable-mdpi', size: 24, largeSize: 48 },
-    { dir: 'drawable-hdpi', size: 36, largeSize: 72 },
-    { dir: 'drawable-xhdpi', size: 48, largeSize: 96 },
-    { dir: 'drawable-xxhdpi', size: 72, largeSize: 144 },
-    { dir: 'drawable-xxxhdpi', size: 96, largeSize: 192 }
+    { dir: 'drawable', size: 48 },
+    { dir: 'drawable-mdpi', size: 24 },
+    { dir: 'drawable-hdpi', size: 36 },
+    { dir: 'drawable-xhdpi', size: 48 },
+    { dir: 'drawable-xxhdpi', size: 72 },
+    { dir: 'drawable-xxxhdpi', size: 96 }
   ];
 
-  for (const { dir, size, largeSize } of notificationDrawableSizes) {
+  for (const { dir, size } of notificationDrawableSizes) {
     const targetDir = path.join(RES_DIR, dir);
     if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
-    // 1. Full color largeIcon for notification body
-    const largeIconBuf = await sharp(LOGO_SRC)
-      .resize(largeSize, largeSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-      .png()
-      .toBuffer();
-    fs.writeFileSync(path.join(targetDir, 'ic_stat_large_icon.png'), largeIconBuf);
-    fs.writeFileSync(path.join(targetDir, 'ic_launcher.png'), largeIconBuf);
-
-    // 2. Pure white silhouette for smallIcon / status bar
-    const resized = await sharp(LOGO_SRC)
-      .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-      .ensureAlpha()
-      .toBuffer();
-
-    const { data, info } = await sharp(resized)
+    const innerSize = Math.round(size * 0.82);
+    const { data, info } = await sharp(LOGO_SRC)
+      .resize(innerSize, innerSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .raw()
       .toBuffer({ resolveWithObject: true });
 
-    let hasTransparent = false;
-    for (let i = 3; i < data.length; i += 4) {
-      if (data[i] < 200) {
-        hasTransparent = true;
-        break;
-      }
-    }
-
+    const out = Buffer.alloc(data.length);
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
       const a = data[i + 3];
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
 
-      if (hasTransparent) {
-        if (a > 25) {
-          data[i] = 255;
-          data[i + 1] = 255;
-          data[i + 2] = 255;
-        } else {
-          data[i] = 0;
-          data[i + 1] = 0;
-          data[i + 2] = 0;
-          data[i + 3] = 0;
-        }
+      if (a < 30 || lum < 65) {
+        out[i] = 0;
+        out[i + 1] = 0;
+        out[i + 2] = 0;
+        out[i + 3] = 0;
       } else {
-        const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-        if (luminance > 60) {
-          data[i] = 255;
-          data[i + 1] = 255;
-          data[i + 2] = 255;
-          data[i + 3] = 255;
-        } else {
-          data[i] = 0;
-          data[i + 1] = 0;
-          data[i + 2] = 0;
-          data[i + 3] = 0;
-        }
+        const normAlpha = Math.min(255, Math.round(((lum - 65) / 190) * 255 * (a / 255)));
+        out[i] = 255;
+        out[i + 1] = 255;
+        out[i + 2] = 255;
+        out[i + 3] = normAlpha;
       }
     }
 
-    const statBuf = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+    const statBuf = await sharp(out, { raw: { width: info.width, height: info.height, channels: 4 } })
       .png()
       .toBuffer();
-    fs.writeFileSync(path.join(targetDir, 'ic_stat_icon.png'), statBuf);
+
+    const finalBuf = await sharp({
+      create: {
+        width: size,
+        height: size,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0 }
+      }
+    })
+      .composite([{ input: statBuf, gravity: 'center' }])
+      .png()
+      .toBuffer();
+
+    fs.writeFileSync(path.join(targetDir, 'ic_stat_icon.png'), finalBuf);
   }
 
   console.log('All Android assets and notification icons customized with GKD logo!');
