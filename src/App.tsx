@@ -24,6 +24,7 @@ import {
 import { exportAppToExcel } from './lib/excelExport';
 import { downloadFullBackupImmediately, restoreFullBackupFromJSON, saveAutomaticRestorePoint } from './lib/backupManager';
 import { sendAppNotification, syncDueBillsRecurringReminders } from './lib/notifications';
+import { App as CapApp } from '@capacitor/app';
 import {
   Transaction,
   Bill,
@@ -303,7 +304,7 @@ export default function App() {
     saveAllAppData(data);
   }, [data]);
 
-  // Synchronize 2-hour recurring notifications for unpaid due bills
+  // Synchronize 2-hour recurring native notifications for unpaid due bills
   useEffect(() => {
     const todayStr = getTodayStr();
     const dueBills = (data.bills || []).filter(
@@ -315,25 +316,99 @@ export default function App() {
     const totalDueCount = dueBills.length + dueTx.length;
     const names = [...dueBills.map((b) => b.title), ...dueTx.map((t) => t.description)];
 
-    // Schedule native background reminders every 2h on Android
+    // Schedule native background reminders every 2h on Android (controlled by Android OS even when app is closed)
     syncDueBillsRecurringReminders(totalDueCount, names);
-
-    // Foreground / active runtime reminder every 2h
-    const intervalId = setInterval(() => {
-      if (totalDueCount > 0) {
-        const lastSent = Number(localStorage.getItem('fin_control_last_due_reminder_time') || 0);
-        const twoHoursMs = 2 * 60 * 60 * 1000;
-        if (Date.now() - lastSent >= twoHoursMs) {
-          localStorage.setItem('fin_control_last_due_reminder_time', String(Date.now()));
-          sendAppNotification('⏰ Lembrete: Contas a Pagar', {
-            body: `Você possui ${totalDueCount} conta(s) pendente(s) hoje. Marque como paga para pausar os avisos!`,
-          });
-        }
-      }
-    }, 60 * 1000);
-
-    return () => clearInterval(intervalId);
   }, [data.bills, data.transactions]);
+
+  // Hardware Back Button: Nunca fecha o app. Volta para a tela inicial se estiver em outra tela/modal.
+  useEffect(() => {
+    let isMounted = true;
+    let listenerHandle: { remove: () => void } | null = null;
+
+    CapApp.addListener('backButton', () => {
+      // 1. Se houver algum modal aberto, fecha o modal
+      let hasModalOpen = false;
+      if (isTransactionModalOpen) {
+        setIsTransactionModalOpen(false);
+        setEditingTransaction(null);
+        hasModalOpen = true;
+      }
+      if (isBillModalOpen) {
+        setIsBillModalOpen(false);
+        setEditingBill(null);
+        hasModalOpen = true;
+      }
+      if (isCalculatorsModalOpen) {
+        setIsCalculatorsModalOpen(false);
+        hasModalOpen = true;
+      }
+      if (isHelpModalOpen) {
+        setIsHelpModalOpen(false);
+        hasModalOpen = true;
+      }
+      if (isResetModalOpen) {
+        setIsResetModalOpen(false);
+        hasModalOpen = true;
+      }
+      if (isCreditCardsModalOpen) {
+        setIsCreditCardsModalOpen(false);
+        hasModalOpen = true;
+      }
+      if (isModuleCustomizerOpen) {
+        setIsModuleCustomizerOpen(false);
+        hasModalOpen = true;
+      }
+      if (isNotificationsAuthOpen) {
+        setIsNotificationsAuthOpen(false);
+        hasModalOpen = true;
+      }
+      if (isAiAssistantOpen) {
+        setIsAiAssistantOpen(false);
+        hasModalOpen = true;
+      }
+      if (isBackupModalOpen) {
+        setIsBackupModalOpen(false);
+        hasModalOpen = true;
+      }
+
+      if (hasModalOpen) {
+        return;
+      }
+
+      // 2. Se estiver em qualquer tela ou aba que não seja a inicial ('contas'), volta para a inicial
+      if (activeTab !== 'contas') {
+        setActiveTab('contas');
+        return;
+      }
+
+      // 3. Se já estiver na tela inicial, não faz nada (impede que o app feche)
+    }).then((handle) => {
+      if (isMounted) {
+        listenerHandle = handle;
+      } else {
+        handle.remove();
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      if (listenerHandle) {
+        listenerHandle.remove();
+      }
+    };
+  }, [
+    activeTab,
+    isTransactionModalOpen,
+    isBillModalOpen,
+    isCalculatorsModalOpen,
+    isHelpModalOpen,
+    isResetModalOpen,
+    isCreditCardsModalOpen,
+    isModuleCustomizerOpen,
+    isNotificationsAuthOpen,
+    isAiAssistantOpen,
+    isBackupModalOpen,
+  ]);
 
   const handleAddVehicle = (newVehicle: Omit<Vehicle, 'id'>) => {
     setData((prev) => ({

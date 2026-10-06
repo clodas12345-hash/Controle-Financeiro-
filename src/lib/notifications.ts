@@ -1,11 +1,42 @@
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 
+export async function requestBatteryOptimizationExemption(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+
+  try {
+    const exactStatus = await LocalNotifications.checkExactNotificationSetting();
+    if (exactStatus.exact_alarm !== 'granted') {
+      await LocalNotifications.changeExactNotificationSetting();
+    }
+  } catch (err) {
+    console.warn('Exact alarm setting error:', err);
+  }
+
+  try {
+    const pkgName = 'com.gkd.mobility';
+    const ignoreBatteryUrl = `intent:#Intent;action=android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS;data=package:${pkgName};end`;
+    const hasPrompted = sessionStorage.getItem('battery_optimization_prompted');
+    if (!hasPrompted) {
+      sessionStorage.setItem('battery_optimization_prompted', 'true');
+      window.location.href = ignoreBatteryUrl;
+    }
+  } catch (err) {
+    console.warn('Battery optimization intent error:', err);
+  }
+}
+
 export async function requestNotificationPermission(): Promise<boolean> {
   if (Capacitor.isNativePlatform()) {
     try {
       const status = await LocalNotifications.requestPermissions();
-      return status.display === 'granted';
+      const granted = status.display === 'granted';
+
+      if (granted) {
+        await requestBatteryOptimizationExemption();
+      }
+
+      return granted;
     } catch (err) {
       console.warn('requestNotificationPermission falhou no Capacitor:', err);
       return false;
@@ -55,7 +86,7 @@ export async function sendAppNotification(title: string, options?: { body?: stri
 }
 
 const REMINDER_NOTIFICATION_BASE_ID = 8000;
-const REMINDER_COUNT = 12; // 12 agendamentos de 2h = 24h de lembretes automáticos
+const REMINDER_COUNT = 12; // 12 agendamentos de 2h = 24h de lembretes automáticos nativos
 
 export async function cancelDueBillsReminders(): Promise<void> {
   if (Capacitor.isNativePlatform()) {
@@ -92,7 +123,7 @@ export async function syncDueBillsRecurringReminders(dueCount: number, billNames
       }
       await LocalNotifications.cancel({ notifications: idsToCancel });
 
-      // Reschedule reminders every 2 hours
+      // Reschedule exact native reminders every 2 hours using native Android alarms
       const twoHoursMs = 2 * 60 * 60 * 1000;
       const now = Date.now();
       const newNotifications = [];
@@ -102,7 +133,11 @@ export async function syncDueBillsRecurringReminders(dueCount: number, billNames
           id: REMINDER_NOTIFICATION_BASE_ID + i,
           title: '⏰ Lembrete: Contas a Pagar',
           body: notificationBody,
-          schedule: { at: new Date(now + i * twoHoursMs) },
+          schedule: {
+            at: new Date(now + i * twoHoursMs),
+            allowWhileIdle: true,
+          },
+          isExactNotification: true,
           smallIcon: 'ic_stat_icon',
           iconColor: '#34d399',
           sound: 'default',

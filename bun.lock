@@ -5,7 +5,11 @@
     "": {
       "name": "react-example",
       "dependencies": {
+        "@capacitor/app": "^8.1.2",
         "@capacitor/core": "^8.5.0",
+        "@capacitor/filesystem": "^8.1.3",
+        "@capacitor/local-notifications": "^8.3.1",
+        "@capacitor/share": "^8.0.1",
         "@google/genai": "^2.4.0",
         "@tailwindcss/vite": "^4.1.14",
         "@vitejs/plugin-react": "^5.0.4",
@@ -18,6 +22,7 @@
         "react-dom": "^19.0.1",
         "react-is": "^19.3.0",
         "recharts": "^3.10.0",
+        "sharp": "^0.35.3",
         "vite": "^6.2.3",
         "xlsx": "^0.18.5",
       },
@@ -77,9 +82,19 @@
 
     "@capacitor/android": ["@capacitor/android@8.5.0", "", { "peerDependencies": { "@capacitor/core": "^8.5.0" } }, "sha512-Rb3prJeQiTp0pQhSSOReJuG9VgibOGMG4ECs+UhMwr6TCCHZ3NCZO811bDA0HxD0xrT/gCrJAsY5yfEATu84JQ=="],
 
+    "@capacitor/app": ["@capacitor/app@8.1.2", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-uKBlsrXH0IdvUn69e/KKYbZ32A06pcrUdG8LWuZ/6y33YMXZXLEEdNSwl+jKS/SrsTWqnePs8EqSWaiQM3mUGA=="],
+
     "@capacitor/cli": ["@capacitor/cli@8.5.0", "", { "dependencies": { "@ionic/cli-framework-output": "^2.2.8", "@ionic/utils-subprocess": "^3.0.1", "@ionic/utils-terminal": "^2.3.5", "commander": "^12.1.0", "debug": "^4.4.0", "env-paths": "^2.2.0", "fs-extra": "^11.2.0", "kleur": "^4.1.5", "native-run": "^2.0.3", "open": "^8.4.0", "plist": "^3.1.0", "prompts": "^2.4.2", "rimraf": "^6.0.1", "semver": "^7.6.3", "tar": "^7.5.3", "tslib": "^2.8.1", "xcode": "^3.0.1", "xml2js": "^0.6.2" }, "bin": { "cap": "bin/capacitor", "capacitor": "bin/capacitor" } }, "sha512-rLdzMUM5QV4WITcqoWv04p32i14BXgUH2diqEH6MWQlWaJfiyNrvOyt/+d5vHAfOxOm1klBu637VDEobctlwBA=="],
 
     "@capacitor/core": ["@capacitor/core@8.5.0", "", { "dependencies": { "tslib": "^2.1.0" } }, "sha512-Ca4krtqH1hothjtBIwf2J2TW7IhYq1ujp8QeItTiJohNsqij8ja2DYYH3DU0l8RmxCWaBAFTGA2TgOgOMCSNsQ=="],
+
+    "@capacitor/filesystem": ["@capacitor/filesystem@8.1.4", "", { "dependencies": { "@capacitor/synapse": "^1.0.4" }, "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-8MXmt10cb+dGWoh8jUeO8on0U6iETQCX5k+fmdB278PZ3MYDEVGQo08+hroaOtUbK3+5stiRk4/K6QBHKepv0A=="],
+
+    "@capacitor/local-notifications": ["@capacitor/local-notifications@8.3.1", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-F7zu/+p/mIR958YP4axOkeI5hBKRaXDyYjbNPrAil2wWfd7OxScPSTvP9t85NpQ0eULVRu0/sntoxOg6ck477A=="],
+
+    "@capacitor/share": ["@capacitor/share@8.0.3", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-gnvZBV1NPu2B8vd1UKncR56G15ueHd0aZLqgDov++t3SmTBG9Q0VrAZ1VnHn5stxlmglVaTb4RwopMgbpLzroA=="],
+
+    "@capacitor/synapse": ["@capacitor/synapse@1.0.4", "", {}, "sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw=="],
 
     "@emnapi/runtime": ["@emnapi/runtime@1.11.2", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-kyOl3X0DuTiT1h2ft8r2fYO8JYtU9a9Xis/zBSiGArNaagCOWx90N1k2wxp18czFDH+OgcWGb5ZP/XMt3dcyPA=="],
 

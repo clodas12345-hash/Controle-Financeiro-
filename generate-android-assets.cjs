@@ -135,7 +135,8 @@ async function generateAssets() {
       'android.permission.FOREGROUND_SERVICE',
       'android.permission.VIBRATE',
       'android.permission.RECEIVE_BOOT_COMPLETED',
-      'android.permission.SCHEDULE_EXACT_ALARM'
+      'android.permission.SCHEDULE_EXACT_ALARM',
+      'android.permission.USE_EXACT_ALARM'
     ];
     let added = false;
     for (const perm of requiredPermissions) {
