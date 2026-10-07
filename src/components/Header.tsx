@@ -213,7 +213,7 @@ export const Header: React.FC<HeaderProps> = ({
               }
             }}
           >
-            <div className="w-11 h-11 rounded-2xl p-0.5 flex items-center justify-center shadow-lg border border-white/10 transition-transform group-hover:scale-105 group-active:scale-95 overflow-hidden bg-[#0a0f1d]">
+            <div className="w-11 h-11 rounded-2xl p-0.5 flex items-center justify-center shadow-lg border border-white/20 transition-transform group-hover:scale-105 group-active:scale-95 overflow-hidden bg-white">
               <img
                 src={APP_LOGO_SRC}
                 alt="GKD Mobility Logo"

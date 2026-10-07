@@ -55,9 +55,9 @@ async function generateIcons() {
     }
 
     if (sharp) {
-      const innerSize = Math.round(item.size * 0.72);
+      const innerSize = Math.round(item.size * 0.78);
       const innerLogo = await sharp(iconSrc)
-        .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+        .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
         .png()
         .toBuffer();
 
@@ -78,7 +78,7 @@ async function generateIcons() {
       const circleSvg = Buffer.from(
         `<svg width="${item.size}" height="${item.size}"><circle cx="${item.size / 2}" cy="${item.size / 2}" r="${item.size / 2}" fill="#ffffff"/></svg>`
       );
-      const roundBg = await sharp({
+      await sharp({
         create: {
           width: item.size,
           height: item.size,
@@ -92,9 +92,9 @@ async function generateIcons() {
         .toFile(path.join(targetFolder, 'ic_launcher_round.png'));
 
       // Adaptive icon foreground
-      const innerFgSize = Math.round(item.fgSize * 0.62);
+      const innerFgSize = Math.round(item.fgSize * 0.64);
       const innerFgLogo = await sharp(iconSrc)
-        .resize(innerFgSize, innerFgSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .resize(innerFgSize, innerFgSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
         .png()
         .toBuffer();
 
@@ -103,7 +103,7 @@ async function generateIcons() {
           width: item.fgSize,
           height: item.fgSize,
           channels: 4,
-          background: { r: 0, g: 0, b: 0, alpha: 0 }
+          background: { r: 255, g: 255, b: 255, alpha: 1 }
         }
       })
         .composite([{ input: innerFgLogo, gravity: 'center' }])
@@ -133,35 +133,45 @@ async function generateIcons() {
     }
 
     if (sharp) {
-      const innerSize = Math.round(item.size * 0.82);
+      const innerSize = Math.round(item.size * 0.86);
       const { data, info } = await sharp(iconSrc)
-        .resize(innerSize, innerSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+        .ensureAlpha()
         .raw()
         .toBuffer({ resolveWithObject: true });
 
       const out = Buffer.alloc(data.length);
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        const a = data[i + 3];
-        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      const w = info.width;
+      const h = info.height;
 
-        if (a < 30 || lum < 65) {
-          out[i] = 0;
-          out[i + 1] = 0;
-          out[i + 2] = 0;
-          out[i + 3] = 0;
-        } else {
-          const normAlpha = Math.min(255, Math.round(((lum - 65) / 190) * 255 * (a / 255)));
-          out[i] = 255;
-          out[i + 1] = 255;
-          out[i + 2] = 255;
-          out[i + 3] = normAlpha;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const a = data[i + 3];
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+          const isWhiteBg = (r > 230 && g > 230 && b > 230) || a < 30;
+          const isMedallionZone = y < h * 0.70;
+          const isDarkCore = isMedallionZone && lum < 75 && r < 90;
+
+          if (isWhiteBg || isDarkCore) {
+            out[i] = 0;
+            out[i + 1] = 0;
+            out[i + 2] = 0;
+            out[i + 3] = 0;
+          } else {
+            out[i] = 255;
+            out[i + 1] = 255;
+            out[i + 2] = 255;
+            out[i + 3] = 255;
+          }
         }
       }
 
-      const statBuffer = await sharp(out, { raw: { width: info.width, height: info.height, channels: 4 } })
+      const statBuffer = await sharp(out, { raw: { width: w, height: h, channels: 4 } })
         .png()
         .toBuffer();
 

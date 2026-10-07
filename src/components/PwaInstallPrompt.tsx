@@ -69,7 +69,7 @@ export const PwaInstallPrompt: React.FC = () => {
       <div className="bg-[#1a1b1e] border-b border-emerald-500/30 text-white px-4 py-2.5 shadow-lg relative z-40">
         <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5">
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            <div className="w-9 h-9 rounded-xl p-0.5 shrink-0 border border-white/10 shadow overflow-hidden flex items-center justify-center bg-[#0a0f1d]">
+            <div className="w-9 h-9 rounded-xl p-0.5 shrink-0 border border-white/20 shadow overflow-hidden flex items-center justify-center bg-white">
               <img src={APP_LOGO_SRC} alt="GKD Mobility Logo" className="w-full h-full object-contain rounded-lg" referrerPolicy="no-referrer" />
             </div>
             <div>
@@ -118,7 +118,7 @@ export const PwaInstallPrompt: React.FC = () => {
             </button>
 
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-2xl p-1 shrink-0 shadow-md bg-[#0a0f1d] border border-white/10 overflow-hidden">
+              <div className="w-12 h-12 rounded-2xl p-1 shrink-0 shadow-md bg-white border border-white/20 overflow-hidden">
                 <img src={APP_LOGO_SRC} alt="GKD Mobility Logo" className="w-full h-full object-contain rounded-xl" referrerPolicy="no-referrer" />
               </div>
               <div>

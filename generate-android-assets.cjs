@@ -73,19 +73,19 @@ async function generateAssets() {
     }
   }
 
-  // 2. Set background color to midnight navy #07152b
+  // 2. Set background color to pure white #ffffff to match the new GKD Finance Mobility logo
   const valuesDir = path.join(RES_DIR, 'values');
   if (!fs.existsSync(valuesDir)) fs.mkdirSync(valuesDir, { recursive: true });
   const bgXmlPath = path.join(valuesDir, 'ic_launcher_background.xml');
   const bgXmlContent = `<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#07152b</color>
+    <color name="ic_launcher_background">#ffffff</color>
 </resources>
 `;
   fs.writeFileSync(bgXmlPath, bgXmlContent, 'utf8');
-  console.log('Updated ic_launcher_background.xml with #07152b');
+  console.log('Updated ic_launcher_background.xml with #ffffff');
 
-  // 2b. Set App Name to "Controle Financeiro" (removing GKD)
+  // 2b. Set App Name to "Controle Financeiro"
   const stringsXmlPath = path.join(valuesDir, 'strings.xml');
   const stringsXmlContent = `<?xml version='1.0' encoding='utf-8'?>
 <resources>
@@ -98,7 +98,7 @@ async function generateAssets() {
   fs.writeFileSync(stringsXmlPath, stringsXmlContent, 'utf8');
   console.log('Updated strings.xml with app_name: "Controle Financeiro"');
 
-  // 2c. Ensure AndroidManifest.xml has all required permissions (Notifications, Camera, Contacts, Nearby, Media, Location, Mic, Call Log)
+  // 2c. Ensure AndroidManifest.xml has all required permissions
   const manifestPath = path.join(__dirname, 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
   if (fs.existsSync(manifestPath)) {
     let manifestContent = fs.readFileSync(manifestPath, 'utf8');
@@ -150,7 +150,7 @@ async function generateAssets() {
     }
     if (added) {
       fs.writeFileSync(manifestPath, manifestContent, 'utf8');
-      console.log('Added all requested permissions (Notifications, Camera, Contacts, Nearby, Media, Location, Mic, Call Log) to AndroidManifest.xml');
+      console.log('Added all requested permissions to AndroidManifest.xml');
     }
   }
 
@@ -167,10 +167,10 @@ async function generateAssets() {
     const targetDir = path.join(RES_DIR, dir);
     if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
-    // Inner logo scaled with safe margin (72% size)
-    const innerSize = Math.round(iconSize * 0.72);
+    // Inner logo scaled with safe margin (78% size)
+    const innerSize = Math.round(iconSize * 0.78);
     const innerLogo = await sharp(LOGO_SRC)
-      .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+      .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
       .png()
       .toBuffer();
 
@@ -199,9 +199,9 @@ async function generateAssets() {
     fs.writeFileSync(path.join(targetDir, 'ic_launcher_round.png'), roundBuf);
 
     // Foreground icon for adaptive icon (centered with safe zone padding)
-    const innerFgSize = Math.round(fgSize * 0.62);
+    const innerFgSize = Math.round(fgSize * 0.64);
     const innerFgBuf = await sharp(LOGO_SRC)
-      .resize(innerFgSize, innerFgSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .resize(innerFgSize, innerFgSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
       .png()
       .toBuffer();
 
@@ -210,7 +210,7 @@ async function generateAssets() {
         width: fgSize,
         height: fgSize,
         channels: 4,
-        background: { r: 0, g: 0, b: 0, alpha: 0 }
+        background: { r: 255, g: 255, b: 255, alpha: 1 }
       }
     })
       .composite([{ input: innerFgBuf, gravity: 'center' }])
@@ -240,9 +240,9 @@ async function generateAssets() {
     const targetDir = path.join(RES_DIR, dir);
     if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
-    const logoMax = Math.round(Math.min(w, h) * 0.45);
+    const logoMax = Math.round(Math.min(w, h) * 0.50);
     const logoResized = await sharp(LOGO_SRC)
-      .resize(logoMax, logoMax, { fit: 'contain', background: { r: 7, g: 21, b: 43, alpha: 0 } })
+      .resize(logoMax, logoMax, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
       .png()
       .toBuffer();
 
@@ -251,7 +251,7 @@ async function generateAssets() {
         width: w,
         height: h,
         channels: 4,
-        background: { r: 7, g: 21, b: 43, alpha: 1 }
+        background: { r: 255, g: 255, b: 255, alpha: 1 }
       }
     })
       .composite([{ input: logoResized, gravity: 'center' }])
@@ -275,35 +275,45 @@ async function generateAssets() {
     const targetDir = path.join(RES_DIR, dir);
     if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
-    const innerSize = Math.round(size * 0.82);
+    const innerSize = Math.round(size * 0.86);
     const { data, info } = await sharp(LOGO_SRC)
-      .resize(innerSize, innerSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+      .ensureAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true });
 
     const out = Buffer.alloc(data.length);
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      const a = data[i + 3];
-      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    const w = info.width;
+    const h = info.height;
 
-      if (a < 30 || lum < 65) {
-        out[i] = 0;
-        out[i + 1] = 0;
-        out[i + 2] = 0;
-        out[i + 3] = 0;
-      } else {
-        const normAlpha = Math.min(255, Math.round(((lum - 65) / 190) * 255 * (a / 255)));
-        out[i] = 255;
-        out[i + 1] = 255;
-        out[i + 2] = 255;
-        out[i + 3] = normAlpha;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const a = data[i + 3];
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+        const isWhiteBg = (r > 230 && g > 230 && b > 230) || a < 30;
+        const isMedallionZone = y < h * 0.70;
+        const isDarkCore = isMedallionZone && lum < 75 && r < 90;
+
+        if (isWhiteBg || isDarkCore) {
+          out[i] = 0;
+          out[i + 1] = 0;
+          out[i + 2] = 0;
+          out[i + 3] = 0;
+        } else {
+          out[i] = 255;
+          out[i + 1] = 255;
+          out[i + 2] = 255;
+          out[i + 3] = 255;
+        }
       }
     }
 
-    const statBuf = await sharp(out, { raw: { width: info.width, height: info.height, channels: 4 } })
+    const statBuf = await sharp(out, { raw: { width: w, height: h, channels: 4 } })
       .png()
       .toBuffer();
 

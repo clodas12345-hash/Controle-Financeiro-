@@ -132,7 +132,7 @@ export const AppPresentationModal: React.FC<AppPresentationModalProps> = ({
             <button
               type="button"
               onClick={() => setIsLogoFullscreen(true)}
-              className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl p-1 flex items-center justify-center shadow-xl border border-white/20 shrink-0 bg-[#0a0f1d] overflow-hidden group cursor-pointer transition-all hover:scale-105 active:scale-95 hover:border-amber-400/60 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl p-1 flex items-center justify-center shadow-xl border border-white/20 shrink-0 bg-white overflow-hidden group cursor-pointer transition-all hover:scale-105 active:scale-95 hover:border-amber-400/60 focus:outline-none focus:ring-2 focus:ring-amber-400"
               title="Clique para ver o logo em tela cheia"
               aria-label="Abrir logo em tela cheia"
             >
@@ -446,11 +446,11 @@ export const AppPresentationModal: React.FC<AppPresentationModalProps> = ({
             className="flex-1 flex items-center justify-center my-auto max-w-lg w-full p-4 sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="relative w-full aspect-[9/10] max-h-[70vh] flex items-center justify-center rounded-3xl p-3 bg-gradient-to-b from-[#0a0f1d] to-[#04060c] border border-cyan-500/30 shadow-[0_0_80px_rgba(6,182,212,0.25)] overflow-hidden">
+            <div className="relative w-full aspect-square max-h-[70vh] flex items-center justify-center rounded-3xl p-4 bg-white border border-cyan-500/30 shadow-[0_0_80px_rgba(6,182,212,0.25)] overflow-hidden">
               <img
                 src={APP_LOGO_SRC}
                 alt="GKD Mobility Logo Fullscreen"
-                className="w-full h-full object-contain rounded-2xl drop-shadow-[0_20px_30px_rgba(0,0,0,0.8)]"
+                className="w-full h-full object-contain rounded-2xl"
                 referrerPolicy="no-referrer"
               />
             </div>
