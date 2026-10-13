@@ -1,6 +1,24 @@
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 
+export async function initNotificationChannel(): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await LocalNotifications.createChannel({
+        id: 'padrao',
+        name: 'Notificações Padrão',
+        description: 'Canal de notificações padrão do app',
+        importance: 5,
+        visibility: 1,
+        vibration: true,
+      });
+      console.log('Canal de notificação "padrao" criado com sucesso.');
+    } catch (err) {
+      console.warn('Erro ao criar canal de notificação:', err);
+    }
+  }
+}
+
 export async function requestBatteryOptimizationExemption(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
 
@@ -33,6 +51,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
       const granted = status.display === 'granted';
 
       if (granted) {
+        await initNotificationChannel();
         await requestBatteryOptimizationExemption();
       }
 
@@ -62,7 +81,8 @@ export async function sendAppNotification(title: string, options?: { body?: stri
             title,
             body: options?.body || '',
             id: options?.id || Math.floor(Math.random() * 1000000) + 1,
-            smallIcon: 'ic_stat_icon',
+            channelId: 'padrao',
+            smallIcon: 'ic_stat_icon_config_sample',
             iconColor: '#34d399',
             sound: 'default'
           }
@@ -81,6 +101,53 @@ export async function sendAppNotification(title: string, options?: { body?: stri
       });
     } catch (webErr) {
       console.warn('Web Notification falhou:', webErr);
+    }
+  }
+}
+
+export async function checkExactAlarmSetting(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return true;
+  try {
+    const res = await LocalNotifications.checkExactNotificationSetting();
+    return res.exact_alarm === 'granted';
+  } catch (e) {
+    return true;
+  }
+}
+
+export async function openExactAlarmSettings(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    await LocalNotifications.changeExactNotificationSetting();
+  } catch (e) {
+    console.warn('Error opening exact alarm settings:', e);
+  }
+}
+
+export async function scheduleTestNotification(): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const id = Math.floor(Math.random() * 1000000) + 1;
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id,
+            title: 'Teste de Notificação',
+            body: 'Esta é uma notificação de teste agendada para 5 segundos.',
+            channelId: 'padrao',
+            smallIcon: 'ic_stat_icon_config_sample',
+            schedule: {
+              at: new Date(Date.now() + 5000),
+              allowWhileIdle: true,
+            },
+            isExactNotification: true,
+            sound: 'default',
+          }
+        ]
+      });
+      console.log('Notificação de teste agendada com sucesso.');
+    } catch (err) {
+      console.warn('Erro ao agendar notificação de teste:', err);
     }
   }
 }
@@ -138,7 +205,8 @@ export async function syncDueBillsRecurringReminders(dueCount: number, billNames
             allowWhileIdle: true,
           },
           isExactNotification: true,
-          smallIcon: 'ic_stat_icon',
+          channelId: 'padrao',
+          smallIcon: 'ic_stat_icon_config_sample',
           iconColor: '#34d399',
           sound: 'default',
         });
