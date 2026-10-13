@@ -175,7 +175,7 @@ async function generateIcons() {
         .png()
         .toBuffer();
 
-      await sharp({
+      const finalBuf = await sharp({
         create: {
           width: item.size,
           height: item.size,
@@ -185,9 +185,13 @@ async function generateIcons() {
       })
         .composite([{ input: statBuffer, gravity: 'center' }])
         .png()
-        .toFile(path.join(targetFolder, 'ic_stat_icon.png'));
+        .toBuffer();
+
+      fs.writeFileSync(path.join(targetFolder, 'ic_stat_icon.png'), finalBuf);
+      fs.writeFileSync(path.join(targetFolder, 'ic_stat_icon_config_sample.png'), finalBuf);
     } else {
       fs.copyFileSync(iconSrc, path.join(targetFolder, 'ic_stat_icon.png'));
+      fs.copyFileSync(iconSrc, path.join(targetFolder, 'ic_stat_icon_config_sample.png'));
     }
   }
 

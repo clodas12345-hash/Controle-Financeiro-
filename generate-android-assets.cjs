@@ -330,6 +330,7 @@ async function generateAssets() {
       .toBuffer();
 
     fs.writeFileSync(path.join(targetDir, 'ic_stat_icon.png'), finalBuf);
+    fs.writeFileSync(path.join(targetDir, 'ic_stat_icon_config_sample.png'), finalBuf);
   }
 
   console.log('All Android assets and notification icons customized with GKD logo!');
