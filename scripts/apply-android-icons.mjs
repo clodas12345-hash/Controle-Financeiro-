@@ -133,59 +133,12 @@ async function generateIcons() {
     }
 
     if (sharp) {
-      const innerSize = Math.round(item.size * 0.86);
-      const { data, info } = await sharp(iconSrc)
-        .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
-        .ensureAlpha()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-
-      const out = Buffer.alloc(data.length);
-      const w = info.width;
-      const h = info.height;
-
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const i = (y * w + x) * 4;
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          const a = data[i + 3];
-          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-
-          const isWhiteBg = (r > 230 && g > 230 && b > 230) || a < 30;
-          const isMedallionZone = y < h * 0.70;
-          const isDarkCore = isMedallionZone && lum < 75 && r < 90;
-
-          if (isWhiteBg || isDarkCore) {
-            out[i] = 0;
-            out[i + 1] = 0;
-            out[i + 2] = 0;
-            out[i + 3] = 0;
-          } else {
-            out[i] = 255;
-            out[i + 1] = 255;
-            out[i + 2] = 255;
-            out[i + 3] = 255;
-          }
-        }
-      }
-
-      const statBuffer = await sharp(out, { raw: { width: w, height: h, channels: 4 } })
-        .png()
-        .toBuffer();
-
-      const finalBuf = await sharp({
-        create: {
-          width: item.size,
-          height: item.size,
-          channels: 4,
-          background: { r: 0, g: 0, b: 0, alpha: 0 }
-        }
-      })
-        .composite([{ input: statBuffer, gravity: 'center' }])
-        .png()
-        .toBuffer();
+      const statSvg = `<svg width="${item.size}" height="${item.size}" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="48" cy="48" r="38" fill="none" stroke="#FFFFFF" stroke-width="10"/>
+        <path d="M 64 36 A 20 20 0 1 0 64 60 L 64 48" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+        <rect x="42" y="18" width="12" height="60" rx="6" fill="#FFFFFF"/>
+      </svg>`;
+      const finalBuf = await sharp(Buffer.from(statSvg)).resize(item.size, item.size).png().toBuffer();
 
       fs.writeFileSync(path.join(targetFolder, 'ic_stat_icon.png'), finalBuf);
       fs.writeFileSync(path.join(targetFolder, 'ic_stat_icon_config_sample.png'), finalBuf);

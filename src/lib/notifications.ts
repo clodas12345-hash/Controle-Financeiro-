@@ -190,31 +190,38 @@ export async function syncDueBillsRecurringReminders(dueCount: number, billNames
       }
       await LocalNotifications.cancel({ notifications: idsToCancel });
 
-      // Reschedule exact native reminders every 2 hours using native Android alarms
-      const twoHoursMs = 2 * 60 * 60 * 1000;
-      const now = Date.now();
+      const today = new Date();
+      // Schedule at fixed hours today: 9 AM, 11 AM, 1 PM, 3 PM, 5 PM, 7 PM, 9 PM
+      const checkHours = [9, 11, 13, 15, 17, 19, 21];
       const newNotifications = [];
+      let idx = 1;
 
-      for (let i = 1; i <= REMINDER_COUNT; i++) {
-        newNotifications.push({
-          id: REMINDER_NOTIFICATION_BASE_ID + i,
-          title: '⏰ Lembrete: Contas a Pagar',
-          body: notificationBody,
-          schedule: {
-            at: new Date(now + i * twoHoursMs),
-            allowWhileIdle: true,
-          },
-          isExactNotification: true,
-          channelId: 'padrao',
-          smallIcon: 'ic_stat_icon_config_sample',
-          iconColor: '#34d399',
-          sound: 'default',
-        });
+      for (const h of checkHours) {
+        const targetTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, 0, 0);
+        if (targetTime.getTime() > Date.now() && idx <= REMINDER_COUNT) {
+          newNotifications.push({
+            id: REMINDER_NOTIFICATION_BASE_ID + idx++,
+            title: '⏰ Lembrete: Contas a Pagar',
+            body: notificationBody,
+            schedule: {
+              at: targetTime,
+              allowWhileIdle: true,
+            },
+            isExactNotification: true,
+            channelId: 'padrao',
+            smallIcon: 'ic_stat_icon',
+            iconColor: '#34d399',
+            sound: 'default',
+          });
+        }
       }
 
-      await LocalNotifications.schedule({ notifications: newNotifications });
+      if (newNotifications.length > 0) {
+        await LocalNotifications.schedule({ notifications: newNotifications });
+      }
     } catch (err) {
-      console.warn('Erro ao agendar lembretes a cada 2h:', err);
+      console.warn('Erro ao agendar lembretes fixos:', err);
     }
   }
 }
+

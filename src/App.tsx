@@ -1576,16 +1576,6 @@ export default function App() {
 
       {/* Main Container - Visão Geral com Módulos Internos */}
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-28 sm:pb-12">
-        <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl mb-4 text-sm text-center">
-          <p>Status da Permissão: <span className="font-bold">{permStatus}</span> | Alarme Exato: <span className="font-bold">{exactAlarmGranted ? 'Permitido' : 'Pendente/Desativado'}</span></p>
-          <div className="flex items-center justify-center gap-2 mt-2 flex-wrap">
-            <button onClick={scheduleTestNotification} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg cursor-pointer hover:bg-emerald-500 transition">Testar notificação (5s)</button>
-            {!exactAlarmGranted && (
-              <button onClick={openExactAlarmSettings} className="px-4 py-2 bg-amber-600 text-white font-bold rounded-lg cursor-pointer hover:bg-amber-500 transition">Liberar Alarme Exato (Android 13+)</button>
-            )}
-          </div>
-        </div>
-
         {(activeTab === 'resumo' || activeTab === 'dashboard') && (
           <Dashboard
             transactions={processedTransactions}
