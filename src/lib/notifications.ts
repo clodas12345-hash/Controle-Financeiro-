@@ -82,7 +82,8 @@ export async function sendAppNotification(title: string, options?: { body?: stri
             body: options?.body || '',
             id: options?.id || Math.floor(Math.random() * 1000000) + 1,
             channelId: 'padrao',
-            smallIcon: 'ic_stat_icon_config_sample',
+            smallIcon: 'ic_stat_icon',
+            largeIcon: 'ic_launcher',
             iconColor: '#34d399',
             sound: 'default'
           }
@@ -133,9 +134,10 @@ export async function scheduleTestNotification(): Promise<void> {
           {
             id,
             title: 'Teste de Notificação',
-            body: 'Esta é uma notificação de teste agendada para 5 segundos.',
+            body: 'Esta é uma notificação de teste com o logo em cores reais.',
             channelId: 'padrao',
-            smallIcon: 'ic_stat_icon_config_sample',
+            smallIcon: 'ic_stat_icon',
+            largeIcon: 'ic_launcher',
             schedule: {
               at: new Date(Date.now() + 5000),
               allowWhileIdle: true,
@@ -153,7 +155,7 @@ export async function scheduleTestNotification(): Promise<void> {
 }
 
 const REMINDER_NOTIFICATION_BASE_ID = 8000;
-const REMINDER_COUNT = 12; // 12 agendamentos de 2h = 24h de lembretes automáticos nativos
+const REMINDER_COUNT = 12; // 12 agendamentos cobrindo múltiplos dias para garantir funcionamento com app fechado
 
 export async function cancelDueBillsReminders(): Promise<void> {
   if (Capacitor.isNativePlatform()) {
@@ -179,7 +181,7 @@ export async function syncDueBillsRecurringReminders(dueCount: number, billNames
   const namesText = billNames && billNames.length > 0
     ? ` (${billNames.slice(0, 2).join(', ')}${billNames.length > 2 ? '...' : ''})`
     : '';
-  const notificationBody = `Você tem ${dueCount} conta(s) pendente(s) hoje${namesText}. Não se esqueça de quitá-las e marcar como pago!`;
+  const notificationBody = `Você tem ${dueCount} conta(s) pendente(s)${namesText}. Não se esqueça de quitá-las e marcar como pago!`;
 
   if (Capacitor.isNativePlatform()) {
     try {
@@ -190,38 +192,44 @@ export async function syncDueBillsRecurringReminders(dueCount: number, billNames
       }
       await LocalNotifications.cancel({ notifications: idsToCancel });
 
-      const today = new Date();
-      // Schedule at fixed hours today: 9 AM, 11 AM, 1 PM, 3 PM, 5 PM, 7 PM, 9 PM
-      const checkHours = [9, 11, 13, 15, 17, 19, 21];
+      const now = Date.now();
+      const checkHours = [9, 13, 18, 21]; // 4 fixed clock slots per day
       const newNotifications = [];
       let idx = 1;
 
-      for (const h of checkHours) {
-        const targetTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, 0, 0);
-        if (targetTime.getTime() > Date.now() && idx <= REMINDER_COUNT) {
-          newNotifications.push({
-            id: REMINDER_NOTIFICATION_BASE_ID + idx++,
-            title: '⏰ Lembrete: Contas a Pagar',
-            body: notificationBody,
-            schedule: {
-              at: targetTime,
-              allowWhileIdle: true,
-            },
-            isExactNotification: true,
-            channelId: 'padrao',
-            smallIcon: 'ic_stat_icon',
-            iconColor: '#34d399',
-            sound: 'default',
-          });
+      // Schedule across today and next 2 days so alarms persist even if app is closed for 48h
+      for (let dayOffset = 0; dayOffset < 3 && idx <= REMINDER_COUNT; dayOffset++) {
+        const targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() + dayOffset);
+
+        for (const h of checkHours) {
+          const checkTime = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), h, 0, 0);
+          if (checkTime.getTime() > now && idx <= REMINDER_COUNT) {
+            newNotifications.push({
+              id: REMINDER_NOTIFICATION_BASE_ID + idx++,
+              title: '⏰ Lembrete: Contas a Pagar',
+              body: notificationBody,
+              schedule: {
+                at: checkTime,
+                allowWhileIdle: true,
+              },
+              isExactNotification: true,
+              channelId: 'padrao',
+              smallIcon: 'ic_stat_icon',
+              largeIcon: 'ic_launcher',
+              iconColor: '#34d399',
+              sound: 'default',
+            });
+          }
         }
       }
 
       if (newNotifications.length > 0) {
         await LocalNotifications.schedule({ notifications: newNotifications });
+        console.log(`Agendados ${newNotifications.length} lembretes nativos com logo em cores reais (multidia).`);
       }
     } catch (err) {
-      console.warn('Erro ao agendar lembretes fixos:', err);
+      console.warn('Erro ao agendar lembretes multidia:', err);
     }
   }
 }
-
