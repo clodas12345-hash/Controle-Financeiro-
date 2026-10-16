@@ -92,6 +92,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 export async function sendAppNotification(title: string, options?: { body?: string; id?: number }) {
   if (Capacitor.isNativePlatform()) {
     try {
+      await initNotificationChannel();
       await LocalNotifications.schedule({
         notifications: [
           {
@@ -146,13 +147,14 @@ export async function openExactAlarmSettings(): Promise<void> {
 export async function scheduleTestNotification(): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     try {
+      await initNotificationChannel();
       const id = Math.floor(Math.random() * 1000000) + 1;
       await LocalNotifications.schedule({
         notifications: [
           {
             id,
             title: 'Teste de Lembrete',
-            body: 'Toque em "Marcar como Paga" abaixo para testar a ação direta.',
+            body: 'Arraste a notificação para baixo para ver o botão "Marcar como Paga".',
             channelId: 'padrao',
             actionTypeId: 'BILL_REMINDER_ACTIONS',
             smallIcon: 'ic_stat_icon',
@@ -200,10 +202,12 @@ export async function syncDueBillsRecurringReminders(dueCount: number, billNames
   const namesText = billNames && billNames.length > 0
     ? ` (${billNames.slice(0, 2).join(', ')}${billNames.length > 2 ? '...' : ''})`
     : '';
-  const notificationBody = `Você tem ${dueCount} conta(s) pendente(s)${namesText}. Toque em "Marcar como Paga" para quitar!`;
+  const notificationBody = `Você tem ${dueCount} conta(s) pendente(s)${namesText}. Arraste para baixo e toque em "Marcar como Paga" para quitar!`;
 
   if (Capacitor.isNativePlatform()) {
     try {
+      await initNotificationChannel();
+
       // Cancel previous scheduled reminders before rescheduling
       const idsToCancel = [];
       for (let i = 1; i <= REMINDER_COUNT; i++) {

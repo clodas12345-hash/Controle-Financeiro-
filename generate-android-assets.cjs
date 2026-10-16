@@ -276,9 +276,8 @@ async function generateAssets() {
     if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
     const statSvg = `<svg width="${size}" height="${size}" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="48" cy="48" r="38" fill="none" stroke="#FFFFFF" stroke-width="10"/>
-      <path d="M 64 36 A 20 20 0 1 0 64 60 L 64 48" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
-      <rect x="42" y="18" width="12" height="60" rx="6" fill="#FFFFFF"/>
+      <path d="M 48 8 C 25.9 8 8 25.9 8 48 C 8 70.1 25.9 88 48 88 C 62.1 88 74.4 80.5 81.3 69 L 66.8 59.5 C 62.6 66.4 55.7 71 48 71 C 35.3 71 25 60.7 25 48 C 25 35.3 35.3 25 48 25 C 55.7 25 62.6 29.6 66.8 36.5 L 81.3 27 C 74.4 15.5 62.1 8 48 8 Z" fill="#FFFFFF"/>
+      <rect x="42" y="16" width="12" height="64" rx="6" fill="#FFFFFF"/>
     </svg>`;
     const finalBuf = await sharp(Buffer.from(statSvg)).resize(size, size).png().toBuffer();
 
