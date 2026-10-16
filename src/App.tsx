@@ -25,6 +25,7 @@ import { exportAppToExcel } from './lib/excelExport';
 import { downloadFullBackupImmediately, restoreFullBackupFromJSON, saveAutomaticRestorePoint } from './lib/backupManager';
 import { sendAppNotification, syncDueBillsRecurringReminders, requestNotificationPermission, scheduleTestNotification, checkExactAlarmSetting, openExactAlarmSettings } from './lib/notifications';
 import { App as CapApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import {
   Transaction,
   Bill,
@@ -326,9 +327,61 @@ export default function App() {
     const totalDueCount = dueBills.length + dueTx.length;
     const names = [...dueBills.map((b) => b.title), ...dueTx.map((t) => t.description)];
 
-    // Schedule native background reminders every 2h on Android (controlled by Android OS even when app is closed)
+    // Schedule native background reminders on Android (controlled by Android OS even when app is closed)
     syncDueBillsRecurringReminders(totalDueCount, names);
   }, [data.bills, data.transactions]);
+
+  // Handle notification action button clicks (e.g. 'Marcar como Paga')
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let isMounted = true;
+
+    const setupListener = async () => {
+      try {
+        const { LocalNotifications } = await import('@capacitor/local-notifications');
+        LocalNotifications.addListener('localNotificationActionPerformed', (event) => {
+          if (!isMounted) return;
+          if (event.actionId === 'mark_paid') {
+            const todayStr = getTodayStr();
+            setData((prev) => {
+              const pendingBills = (prev.bills || []).filter(
+                (b) => (b.status === 'pendente' || b.status === 'atrasado') && getEffectiveDueDate(b.dueDate) <= todayStr && b.paymentMethod !== 'SEM PAGAMENTO'
+              );
+              if (pendingBills.length === 0) return prev;
+
+              const targetBill = pendingBills[0];
+              const updatedBills = (prev.bills || []).map((b) =>
+                b.id === targetBill.id ? { ...b, status: 'pago' as const, paidDate: todayStr } : b
+              );
+
+              const nextData = { ...prev, bills: updatedBills };
+              saveAllAppData(nextData);
+
+              sendAppNotification('✅ Conta Marcada como Paga!', {
+                body: `A conta "${targetBill.title}" (${formatBRL(targetBill.amount)}) foi quitada direto pela notificação!`,
+              });
+
+              return nextData;
+            });
+          }
+        });
+      } catch (err) {
+        console.warn('Erro ao configurar listener de ação de notificação:', err);
+      }
+    };
+
+    setupListener();
+
+    return () => {
+      isMounted = false;
+      if (Capacitor.isNativePlatform()) {
+        import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
+          LocalNotifications.removeAllListeners();
+        }).catch(() => {});
+      }
+    };
+  }, []);
 
   // Hardware Back Button: Nunca fecha o app. Volta para a tela inicial se estiver em outra tela/modal.
   useEffect(() => {

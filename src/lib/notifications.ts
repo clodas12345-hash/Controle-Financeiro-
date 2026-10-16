@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { LOGO_BASE_64 } from './logoBase64';
 
 export async function initNotificationChannel(): Promise<void> {
   if (Capacitor.isNativePlatform()) {
@@ -12,9 +13,25 @@ export async function initNotificationChannel(): Promise<void> {
         visibility: 1,
         vibration: true,
       });
-      console.log('Canal de notificação "padrao" criado com sucesso.');
+
+      await LocalNotifications.registerActionTypes({
+        types: [
+          {
+            id: 'BILL_REMINDER_ACTIONS',
+            actions: [
+              {
+                id: 'mark_paid',
+                title: '✅ Marcar como Paga',
+                input: false,
+              },
+            ],
+          },
+        ],
+      });
+
+      console.log('Canal de notificação e Ações configurados com sucesso.');
     } catch (err) {
-      console.warn('Erro ao criar canal de notificação:', err);
+      console.warn('Erro ao configurar canal ou ações de notificação:', err);
     }
   }
 }
@@ -82,8 +99,9 @@ export async function sendAppNotification(title: string, options?: { body?: stri
             body: options?.body || '',
             id: options?.id || Math.floor(Math.random() * 1000000) + 1,
             channelId: 'padrao',
+            actionTypeId: 'BILL_REMINDER_ACTIONS',
             smallIcon: 'ic_stat_icon',
-            largeIcon: 'ic_launcher',
+            largeIcon: LOGO_BASE_64,
             iconColor: '#34d399',
             sound: 'default'
           }
@@ -133,11 +151,12 @@ export async function scheduleTestNotification(): Promise<void> {
         notifications: [
           {
             id,
-            title: 'Teste de Notificação',
-            body: 'Esta é uma notificação de teste com o logo em cores reais.',
+            title: 'Teste de Lembrete',
+            body: 'Toque em "Marcar como Paga" abaixo para testar a ação direta.',
             channelId: 'padrao',
+            actionTypeId: 'BILL_REMINDER_ACTIONS',
             smallIcon: 'ic_stat_icon',
-            largeIcon: 'ic_launcher',
+            largeIcon: LOGO_BASE_64,
             schedule: {
               at: new Date(Date.now() + 5000),
               allowWhileIdle: true,
@@ -147,7 +166,7 @@ export async function scheduleTestNotification(): Promise<void> {
           }
         ]
       });
-      console.log('Notificação de teste agendada com sucesso.');
+      console.log('Notificação de teste com ação agendada com sucesso.');
     } catch (err) {
       console.warn('Erro ao agendar notificação de teste:', err);
     }
@@ -181,7 +200,7 @@ export async function syncDueBillsRecurringReminders(dueCount: number, billNames
   const namesText = billNames && billNames.length > 0
     ? ` (${billNames.slice(0, 2).join(', ')}${billNames.length > 2 ? '...' : ''})`
     : '';
-  const notificationBody = `Você tem ${dueCount} conta(s) pendente(s)${namesText}. Não se esqueça de quitá-las e marcar como pago!`;
+  const notificationBody = `Você tem ${dueCount} conta(s) pendente(s)${namesText}. Toque em "Marcar como Paga" para quitar!`;
 
   if (Capacitor.isNativePlatform()) {
     try {
@@ -215,8 +234,9 @@ export async function syncDueBillsRecurringReminders(dueCount: number, billNames
               },
               isExactNotification: true,
               channelId: 'padrao',
+              actionTypeId: 'BILL_REMINDER_ACTIONS',
               smallIcon: 'ic_stat_icon',
-              largeIcon: 'ic_launcher',
+              largeIcon: LOGO_BASE_64,
               iconColor: '#34d399',
               sound: 'default',
             });
@@ -226,10 +246,10 @@ export async function syncDueBillsRecurringReminders(dueCount: number, billNames
 
       if (newNotifications.length > 0) {
         await LocalNotifications.schedule({ notifications: newNotifications });
-        console.log(`Agendados ${newNotifications.length} lembretes nativos com logo em cores reais (multidia).`);
+        console.log(`Agendados ${newNotifications.length} lembretes nativos com ação "Marcar como Paga".`);
       }
     } catch (err) {
-      console.warn('Erro ao agendar lembretes multidia:', err);
+      console.warn('Erro ao agendar lembretes multidia com ação:', err);
     }
   }
 }
