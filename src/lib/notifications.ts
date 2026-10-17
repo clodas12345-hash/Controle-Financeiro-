@@ -48,17 +48,7 @@ export async function requestBatteryOptimizationExemption(): Promise<void> {
     console.warn('Exact alarm setting error:', err);
   }
 
-  try {
-    const pkgName = 'com.gkd.mobility';
-    const ignoreBatteryUrl = `intent:#Intent;action=android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS;data=package:${pkgName};end`;
-    const hasPrompted = sessionStorage.getItem('battery_optimization_prompted');
-    if (!hasPrompted) {
-      sessionStorage.setItem('battery_optimization_prompted', 'true');
-      window.location.href = ignoreBatteryUrl;
-    }
-  } catch (err) {
-    console.warn('Battery optimization intent error:', err);
-  }
+
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {

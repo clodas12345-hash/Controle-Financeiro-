@@ -189,6 +189,80 @@ export const Dashboard: React.FC<DashboardProps> = memo(({
 
   return (
     <div className="space-y-6 pb-12">
+      {/* Gráfico de Rosca - Distribuição de Gastos por Categoria (Mês Atual) */}
+      <div className="bg-[#161618] border border-white/10 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+              <PieChartIcon className="w-5 h-5 text-emerald-400" />
+              Orçamento por Categoria (Mês Atual)
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">Distribuição rápida dos seus gastos mensais</p>
+          </div>
+          <div className="text-right">
+            <span className="text-xs text-slate-400 font-medium">Total do Mês:</span>
+            <p className="text-base font-extrabold text-emerald-400">{formatBRL(monthExpense)}</p>
+          </div>
+        </div>
+
+        {categoryChartData.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={categoryChartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={65}
+                    outerRadius={95}
+                    paddingAngle={4}
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                    labelLine={false}
+                  >
+                    {categoryChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: any) => formatBRL(Number(value))}
+                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '1rem', color: '#fff', fontSize: '12px' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {categoryChartData
+                .sort((a, b) => b.value - a.value)
+                .map((item, idx) => {
+                  const percentage = monthExpense > 0 ? Math.round((item.value / monthExpense) * 100) : 0;
+                  const color = COLORS[idx % COLORS.length];
+                  return (
+                    <div key={item.name} className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                        <span className="text-xs font-bold text-white">{item.name}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-extrabold text-emerald-400">{formatBRL(item.value)}</span>
+                        <span className="text-[10px] text-slate-400 ml-2">({percentage}%)</span>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        ) : (
+          <div className="py-12 text-center">
+            <PieChartIcon className="w-12 h-12 text-white/20 mx-auto mb-3" />
+            <p className="text-sm text-slate-400 font-medium">Nenhuma despesa registrada neste mês.</p>
+            <p className="text-xs text-slate-500 mt-1">Registre suas despesas para visualizar o gráfico de orçamento aqui.</p>
+          </div>
+        )}
+      </div>
+
       {/* Visão Geral Header */}
       <div 
         onClick={() => setIsExpanded(!isExpanded)}

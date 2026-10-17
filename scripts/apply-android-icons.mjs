@@ -133,11 +133,53 @@ async function generateIcons() {
     }
 
     if (sharp) {
-      const statSvg = `<svg width="${item.size}" height="${item.size}" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg">
-        <path d="M 48 8 C 25.9 8 8 25.9 8 48 C 8 70.1 25.9 88 48 88 C 62.1 88 74.4 80.5 81.3 69 L 66.8 59.5 C 62.6 66.4 55.7 71 48 71 C 35.3 71 25 60.7 25 48 C 25 35.3 35.3 25 48 25 C 55.7 25 62.6 29.6 66.8 36.5 L 81.3 27 C 74.4 15.5 62.1 8 48 8 Z" fill="#FFFFFF"/>
-        <rect x="42" y="16" width="12" height="64" rx="6" fill="#FFFFFF"/>
-      </svg>`;
-      const finalBuf = await sharp(Buffer.from(statSvg)).resize(item.size, item.size).png().toBuffer();
+      const innerSize = Math.round(item.size * 0.86);
+      const { data, info } = await sharp(iconSrc)
+        .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      const out = Buffer.alloc(data.length);
+      const w = info.width;
+      const h = info.height;
+
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = (y * w + x) * 4;
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+          const a = data[idx + 3];
+
+          const isBg = (r > 235 && g > 235 && b > 235) || a < 25;
+
+          if (isBg) {
+            out[idx] = 0;
+            out[idx + 1] = 0;
+            out[idx + 2] = 0;
+            out[idx + 3] = 0;
+          } else {
+            out[idx] = 255;
+            out[idx + 1] = 255;
+            out[idx + 2] = 255;
+            out[idx + 3] = 255;
+          }
+        }
+      }
+
+      const statBuf = await sharp(out, { raw: { width: w, height: h, channels: 4 } }).png().toBuffer();
+      const finalBuf = await sharp({
+        create: {
+          width: item.size,
+          height: item.size,
+          channels: 4,
+          background: { r: 0, g: 0, b: 0, alpha: 0 }
+        }
+      })
+        .composite([{ input: statBuf, gravity: 'center' }])
+        .png()
+        .toBuffer();
 
       fs.writeFileSync(path.join(targetFolder, 'ic_stat_icon.png'), finalBuf);
       fs.writeFileSync(path.join(targetFolder, 'ic_stat_icon_config_sample.png'), finalBuf);
