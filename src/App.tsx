@@ -343,27 +343,36 @@ export default function App() {
         LocalNotifications.addListener('localNotificationActionPerformed', (event) => {
           if (!isMounted) return;
           if (event.actionId === 'mark_paid') {
-            const todayStr = getTodayStr();
-            setData((prev) => {
-              const pendingBills = (prev.bills || []).filter(
-                (b) => (b.status === 'pendente' || b.status === 'atrasado') && getEffectiveDueDate(b.dueDate) <= todayStr && b.paymentMethod !== 'SEM PAGAMENTO'
-              );
-              if (pendingBills.length === 0) return prev;
+            console.log('Action mark_paid triggered, event:', event);
+            setTimeout(() => {
+              const todayStr = getTodayStr();
+              setData((prev) => {
+                console.log('Action mark_paid, updating state...');
+                const pendingBills = (prev.bills || []).filter(
+                  (b) => (b.status === 'pendente' || b.status === 'atrasado') && getEffectiveDueDate(b.dueDate) <= todayStr && b.paymentMethod !== 'SEM PAGAMENTO'
+                );
+                if (pendingBills.length === 0) {
+                  console.log('No pending bills found for mark_paid');
+                  return prev;
+                }
 
-              const targetBill = pendingBills[0];
-              const updatedBills = (prev.bills || []).map((b) =>
-                b.id === targetBill.id ? { ...b, status: 'pago' as const, paidDate: todayStr } : b
-              );
+                const targetBill = pendingBills[0];
+                console.log('Target bill:', targetBill);
+                const updatedBills = (prev.bills || []).map((b) =>
+                  b.id === targetBill.id ? { ...b, status: 'pago' as const, paidDate: todayStr } : b
+                );
 
-              const nextData = { ...prev, bills: updatedBills };
-              saveAllAppData(nextData);
+                const nextData = { ...prev, bills: updatedBills };
+                saveAllAppData(nextData);
+                console.log('Saved app data');
 
-              sendAppNotification('✅ Conta Marcada como Paga!', {
-                body: `A conta "${targetBill.title}" (${formatBRL(targetBill.amount)}) foi quitada direto pela notificação!`,
+                sendAppNotification('✅ Conta Marcada como Paga!', {
+                  body: `A conta "${targetBill.title}" (${formatBRL(targetBill.amount)}) foi quitada direto pela notificação!`,
+                });
+
+                return nextData;
               });
-
-              return nextData;
-            });
+            }, 500); // 500ms delay
           }
         });
       } catch (err) {

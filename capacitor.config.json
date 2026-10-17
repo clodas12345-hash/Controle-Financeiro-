@@ -7,8 +7,7 @@
   },
   "plugins": {
     "LocalNotifications": {
-      "smallIcon": "ic_stat_icon_config_sample",
-      "iconColor": "#34d399",
+      "smallIcon": "ic_stat_icon",
       "sound": "default"
     }
   }

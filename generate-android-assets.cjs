@@ -43,18 +43,29 @@ async function generateAssets() {
     fs.copyFileSync(LOGO_SRC, publicPng);
   }
 
+  // Update public stat icons with real colors
+  const stat96 = await sharp(LOGO_SRC)
+    .resize(96, 96, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+    .png()
+    .toBuffer();
+  fs.writeFileSync(path.join(__dirname, 'public', 'ic_stat_icon.png'), stat96);
+  fs.writeFileSync(path.join(__dirname, 'public', 'ic_stat_large_icon.png'), stat96);
+
   if (!fs.existsSync(RES_DIR)) {
     console.log('Android res directory does not exist yet. Run cap add android first.');
     return;
   }
 
-  console.log('Generating Android icons and splash screens from:', LOGO_SRC);
+  console.log('Generating Android icons and notification assets with REAL LOGO COLORS from:', LOGO_SRC);
 
   // 1. Remove generic vector drawables that override mipmaps on API 24+
   const genericVectors = [
     path.join(RES_DIR, 'drawable-v24', 'ic_launcher_foreground.xml'),
+    path.join(RES_DIR, 'drawable-v24'),
     path.join(RES_DIR, 'drawable', 'ic_launcher_background.xml'),
-    path.join(RES_DIR, 'drawable-v24')
+    path.join(RES_DIR, 'mipmap-anydpi-v26', 'ic_launcher.xml'),
+    path.join(RES_DIR, 'mipmap-anydpi-v26', 'ic_launcher_round.xml'),
+    path.join(RES_DIR, 'mipmap-anydpi-v26')
   ];
 
   for (const item of genericVectors) {
@@ -73,7 +84,7 @@ async function generateAssets() {
     }
   }
 
-  // 2. Set background color to pure white #ffffff to match the new GKD Finance Mobility logo
+  // 2. Set background color to pure white #ffffff to match the GKD Finance Mobility logo
   const valuesDir = path.join(RES_DIR, 'values');
   if (!fs.existsSync(valuesDir)) fs.mkdirSync(valuesDir, { recursive: true });
   const bgXmlPath = path.join(valuesDir, 'ic_launcher_background.xml');
@@ -98,7 +109,7 @@ async function generateAssets() {
   fs.writeFileSync(stringsXmlPath, stringsXmlContent, 'utf8');
   console.log('Updated strings.xml with app_name: "Controle Financeiro"');
 
-  // 2c. Ensure AndroidManifest.xml has all required permissions
+  // 2c. Ensure AndroidManifest.xml has all required permissions and correct icons
   const manifestPath = path.join(__dirname, 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
   if (fs.existsSync(manifestPath)) {
     let manifestContent = fs.readFileSync(manifestPath, 'utf8');
@@ -167,8 +178,8 @@ async function generateAssets() {
     const targetDir = path.join(RES_DIR, dir);
     if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
-    // Inner logo scaled with safe margin (78% size)
-    const innerSize = Math.round(iconSize * 0.78);
+    // Inner logo scaled with safe margin (80% size)
+    const innerSize = Math.round(iconSize * 0.80);
     const innerLogo = await sharp(LOGO_SRC)
       .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
       .png()
@@ -199,7 +210,7 @@ async function generateAssets() {
     fs.writeFileSync(path.join(targetDir, 'ic_launcher_round.png'), roundBuf);
 
     // Foreground icon for adaptive icon (centered with safe zone padding)
-    const innerFgSize = Math.round(fgSize * 0.64);
+    const innerFgSize = Math.round(fgSize * 0.68);
     const innerFgBuf = await sharp(LOGO_SRC)
       .resize(innerFgSize, innerFgSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
       .png()
@@ -218,10 +229,53 @@ async function generateAssets() {
       .toBuffer();
 
     fs.writeFileSync(path.join(targetDir, 'ic_launcher_foreground.png'), fgBuf);
-    console.log(`Generated icons in ${dir}`);
+    console.log(`Generated launcher icons in ${dir}`);
   }
 
-  // 4. Splash screens
+  // 4. Notification & System Drawables (REAL APPLICATION LOGO COLORS - NO WHITE-SILHOUETTE)
+  const notificationDrawableSizes = [
+    { dir: 'drawable', size: 96 },
+    { dir: 'drawable-mdpi', size: 48 },
+    { dir: 'drawable-hdpi', size: 72 },
+    { dir: 'drawable-xhdpi', size: 96 },
+    { dir: 'drawable-xxhdpi', size: 144 },
+    { dir: 'drawable-xxxhdpi', size: 192 }
+  ];
+
+  for (const { dir, size } of notificationDrawableSizes) {
+    const targetDir = path.join(RES_DIR, dir);
+    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+
+    // Generate real-color icon scaled to fit with clean white circular background
+    const innerSize = Math.round(size * 0.88);
+    const innerLogo = await sharp(LOGO_SRC)
+      .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+      .png()
+      .toBuffer();
+
+    const finalBuf = await sharp({
+      create: {
+        width: size,
+        height: size,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 1 }
+      }
+    })
+      .composite([{ input: innerLogo, gravity: 'center' }])
+      .png()
+      .toBuffer();
+
+    // Write all possible identifiers used by Capacitor LocalNotifications:
+    fs.writeFileSync(path.join(targetDir, 'ic_stat_icon.png'), finalBuf);
+    fs.writeFileSync(path.join(targetDir, 'ic_stat_icon_config_sample.png'), finalBuf);
+    fs.writeFileSync(path.join(targetDir, 'ic_launcher.png'), finalBuf);
+    fs.writeFileSync(path.join(targetDir, 'ic_launcher_round.png'), finalBuf);
+    fs.writeFileSync(path.join(targetDir, 'app_logo.png'), finalBuf);
+    fs.writeFileSync(path.join(targetDir, 'logo.png'), finalBuf);
+    console.log(`Generated real-color notification drawables in ${dir}`);
+  }
+
+  // 5. Splash screens
   const splashSizes = [
     { dir: 'drawable', w: 480, h: 800 },
     { dir: 'drawable-port-mdpi', w: 320, h: 480 },
@@ -261,73 +315,7 @@ async function generateAssets() {
     fs.writeFileSync(path.join(targetDir, 'splash.png'), splashBuf);
   }
 
-  // 5. Notification drawables (Pure transparent monochrome silhouette smallIcon)
-  const notificationDrawableSizes = [
-    { dir: 'drawable', size: 48 },
-    { dir: 'drawable-mdpi', size: 24 },
-    { dir: 'drawable-hdpi', size: 36 },
-    { dir: 'drawable-xhdpi', size: 48 },
-    { dir: 'drawable-xxhdpi', size: 72 },
-    { dir: 'drawable-xxxhdpi', size: 96 }
-  ];
-
-  for (const { dir, size } of notificationDrawableSizes) {
-    const targetDir = path.join(RES_DIR, dir);
-    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
-
-    const innerSize = Math.round(size * 0.86);
-    const { data, info } = await sharp(LOGO_SRC)
-      .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-
-    const out = Buffer.alloc(data.length);
-    const w = info.width;
-    const h = info.height;
-
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const idx = (y * w + x) * 4;
-        const r = data[idx];
-        const g = data[idx + 1];
-        const b = data[idx + 2];
-        const a = data[idx + 3];
-
-        const isBg = (r > 235 && g > 235 && b > 235) || a < 25;
-
-        if (isBg) {
-          out[idx] = 0;
-          out[idx + 1] = 0;
-          out[idx + 2] = 0;
-          out[idx + 3] = 0;
-        } else {
-          out[idx] = 255;
-          out[idx + 1] = 255;
-          out[idx + 2] = 255;
-          out[idx + 3] = 255;
-        }
-      }
-    }
-
-    const statBuf = await sharp(out, { raw: { width: w, height: h, channels: 4 } }).png().toBuffer();
-    const finalBuf = await sharp({
-      create: {
-        width: size,
-        height: size,
-        channels: 4,
-        background: { r: 0, g: 0, b: 0, alpha: 0 }
-      }
-    })
-      .composite([{ input: statBuf, gravity: 'center' }])
-      .png()
-      .toBuffer();
-
-    fs.writeFileSync(path.join(targetDir, 'ic_stat_icon.png'), finalBuf);
-    fs.writeFileSync(path.join(targetDir, 'ic_stat_icon_config_sample.png'), finalBuf);
-  }
-
-  console.log('All Android assets and notification icons customized with GKD logo!');
+  console.log('✅ All Android assets and notification icons customized with the exact GKD logo in REAL COLORS!');
 }
 
 generateAssets().catch(err => {

@@ -92,8 +92,7 @@ export async function sendAppNotification(title: string, options?: { body?: stri
             channelId: 'padrao',
             actionTypeId: 'BILL_REMINDER_ACTIONS',
             smallIcon: 'ic_stat_icon',
-            largeIcon: LOGO_BASE_64,
-            iconColor: '#34d399',
+            largeIcon: 'ic_stat_icon',
             sound: 'default'
           }
         ]
@@ -148,7 +147,7 @@ export async function scheduleTestNotification(): Promise<void> {
             channelId: 'padrao',
             actionTypeId: 'BILL_REMINDER_ACTIONS',
             smallIcon: 'ic_stat_icon',
-            largeIcon: LOGO_BASE_64,
+            largeIcon: 'ic_stat_icon',
             schedule: {
               at: new Date(Date.now() + 5000),
               allowWhileIdle: true,
@@ -230,8 +229,7 @@ export async function syncDueBillsRecurringReminders(dueCount: number, billNames
               channelId: 'padrao',
               actionTypeId: 'BILL_REMINDER_ACTIONS',
               smallIcon: 'ic_stat_icon',
-              largeIcon: LOGO_BASE_64,
-              iconColor: '#34d399',
+              largeIcon: 'ic_stat_icon',
               sound: 'default',
             });
           }
