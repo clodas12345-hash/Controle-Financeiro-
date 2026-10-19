@@ -73,48 +73,68 @@ export function saveData<T>(key: string, value: T): void {
 }
 
 export function loadAllAppData() {
-  const loadOrInitial = <T>(key: string, initial: T): T => {
-    const stored = localStorage.getItem(key);
-    if (stored === null) return initial;
-    try {
-      return JSON.parse(stored);
-    } catch (error) {
-      console.error(`Error parsing ${key} from localStorage:`, error);
-      return initial;
-    }
-  };
+  try {
+    const loadOrInitial = <T>(key: string, initial: T): T => {
+      try {
+        const stored = localStorage.getItem(key);
+        if (stored === null) return initial;
+        return JSON.parse(stored);
+      } catch (error) {
+        console.error(`Error parsing ${key} from localStorage:`, error);
+        return initial;
+      }
+    };
 
-  const ensuredBills = loadOrInitial<Bill[]>(KEYS.BILLS, initialBills);
-  const ensuredTransactions = loadOrInitial<Transaction[]>(KEYS.TRANSACTIONS, initialTransactions);
-  const loadedModules = loadData<ModuleId[]>(KEYS.ENABLED_MODULES, DEFAULT_ENABLED_MODULES).filter(
-    (m) => m !== ('diario' as any) && m !== ('carro' as any)
-  );
+    const ensuredBills = loadOrInitial<Bill[]>(KEYS.BILLS, initialBills);
+    const ensuredTransactions = loadOrInitial<Transaction[]>(KEYS.TRANSACTIONS, initialTransactions);
+    const loadedModules = loadData<ModuleId[]>(KEYS.ENABLED_MODULES, DEFAULT_ENABLED_MODULES).filter(
+      (m) => m !== ('diario' as any) && m !== ('carro' as any)
+    );
 
-  if (!loadedModules.includes('entradas')) {
-    const contasIndex = loadedModules.indexOf('contas');
-    if (contasIndex !== -1) {
-      loadedModules.splice(contasIndex + 1, 0, 'entradas');
-    } else {
-      loadedModules.splice(1, 0, 'entradas');
+    if (!loadedModules.includes('entradas')) {
+      const contasIndex = loadedModules.indexOf('contas');
+      if (contasIndex !== -1) {
+        loadedModules.splice(contasIndex + 1, 0, 'entradas');
+      } else {
+        loadedModules.splice(1, 0, 'entradas');
+      }
     }
+
+    return {
+      transactions: ensuredTransactions,
+      bills: ensuredBills,
+      homeReadings: loadOrInitial<HomeUtilityReading[]>(KEYS.HOME_READINGS, initialHomeReadings),
+      homeTasks: loadOrInitial<HomeTask[]>(KEYS.HOME_TASKS, initialHomeTasks),
+      budgets: loadOrInitial<MonthlyBudget[]>(KEYS.BUDGETS, initialBudgets),
+      creditCards: loadOrInitial<any[]>(KEYS.CREDIT_CARDS, []),
+      pets: loadOrInitial<Pet[]>(KEYS.PETS, DEFAULT_INITIAL_PETS),
+      petCareRecords: loadOrInitial<PetCareRecord[]>(KEYS.PET_CARE, DEFAULT_INITIAL_PET_CARE),
+      companyProfile: loadOrInitial<CompanyProfile>(KEYS.COMPANY_PROFILE, DEFAULT_INITIAL_COMPANY_PROFILE),
+      companyClients: loadOrInitial<CompanyClient[]>(KEYS.COMPANY_CLIENTS, DEFAULT_INITIAL_COMPANY_CLIENTS),
+      companyDocuments: loadOrInitial<CompanyDocument[]>(KEYS.COMPANY_DOCUMENTS, DEFAULT_INITIAL_COMPANY_DOCUMENTS),
+      vehicles: loadOrInitial<any[]>(KEYS.VEHICLES, []),
+      vehicleServices: loadOrInitial<any[]>(KEYS.VEHICLE_SERVICES, []),
+      enabledModules: loadedModules,
+    };
+  } catch (err) {
+    console.error("Critical error in loadAllAppData, returning safe initial defaults:", err);
+    return {
+      transactions: initialTransactions,
+      bills: initialBills,
+      homeReadings: initialHomeReadings,
+      homeTasks: initialHomeTasks,
+      budgets: initialBudgets,
+      creditCards: [],
+      pets: DEFAULT_INITIAL_PETS,
+      petCareRecords: DEFAULT_INITIAL_PET_CARE,
+      companyProfile: DEFAULT_INITIAL_COMPANY_PROFILE,
+      companyClients: DEFAULT_INITIAL_COMPANY_CLIENTS,
+      companyDocuments: DEFAULT_INITIAL_COMPANY_DOCUMENTS,
+      vehicles: [],
+      vehicleServices: [],
+      enabledModules: DEFAULT_ENABLED_MODULES,
+    };
   }
-
-  return {
-    transactions: ensuredTransactions,
-    bills: ensuredBills,
-    homeReadings: loadOrInitial<HomeUtilityReading[]>(KEYS.HOME_READINGS, initialHomeReadings),
-    homeTasks: loadOrInitial<HomeTask[]>(KEYS.HOME_TASKS, initialHomeTasks),
-    budgets: loadOrInitial<MonthlyBudget[]>(KEYS.BUDGETS, initialBudgets),
-    creditCards: loadOrInitial<any[]>(KEYS.CREDIT_CARDS, []),
-    pets: loadOrInitial<Pet[]>(KEYS.PETS, DEFAULT_INITIAL_PETS),
-    petCareRecords: loadOrInitial<PetCareRecord[]>(KEYS.PET_CARE, DEFAULT_INITIAL_PET_CARE),
-    companyProfile: loadOrInitial<CompanyProfile>(KEYS.COMPANY_PROFILE, DEFAULT_INITIAL_COMPANY_PROFILE),
-    companyClients: loadOrInitial<CompanyClient[]>(KEYS.COMPANY_CLIENTS, DEFAULT_INITIAL_COMPANY_CLIENTS),
-    companyDocuments: loadOrInitial<CompanyDocument[]>(KEYS.COMPANY_DOCUMENTS, DEFAULT_INITIAL_COMPANY_DOCUMENTS),
-    vehicles: loadOrInitial<any[]>(KEYS.VEHICLES, []),
-    vehicleServices: loadOrInitial<any[]>(KEYS.VEHICLE_SERVICES, []),
-    enabledModules: loadedModules,
-  };
 }
 
 export function saveAllAppData(data: {
