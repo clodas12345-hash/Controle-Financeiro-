@@ -165,13 +165,13 @@ export async function scheduleTestNotification(): Promise<void> {
 }
 
 const REMINDER_NOTIFICATION_BASE_ID = 8000;
-const REMINDER_COUNT = 12; // 12 agendamentos cobrindo múltiplos dias para garantir funcionamento com app fechado
+const MAX_REMINDER_IDS = 150;
 
 export async function cancelDueBillsReminders(): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     try {
       const idsToCancel = [];
-      for (let i = 1; i <= REMINDER_COUNT; i++) {
+      for (let i = 1; i <= MAX_REMINDER_IDS; i++) {
         idsToCancel.push({ id: REMINDER_NOTIFICATION_BASE_ID + i });
       }
       await LocalNotifications.cancel({ notifications: idsToCancel });
@@ -182,16 +182,16 @@ export async function cancelDueBillsReminders(): Promise<void> {
   localStorage.removeItem('fin_control_last_due_reminder_time');
 }
 
-export async function syncDueBillsRecurringReminders(dueCount: number, billNames?: string[]): Promise<void> {
-  if (dueCount <= 0) {
+export async function syncDueBillsRecurringReminders(dueBills: any[], dueTransactions: any[]): Promise<void> {
+  const allItems = [
+    ...(dueBills || []).map(b => ({ id: b.id, title: b.title, amount: b.amount, dueDate: b.dueDate, type: 'bill' })),
+    ...(dueTransactions || []).map(t => ({ id: t.id, title: t.description || 'Despesa', amount: t.amount, dueDate: t.date, type: 'tx' }))
+  ];
+
+  if (allItems.length === 0) {
     await cancelDueBillsReminders();
     return;
   }
-
-  const namesText = billNames && billNames.length > 0
-    ? ` (${billNames.slice(0, 2).join(', ')}${billNames.length > 2 ? '...' : ''})`
-    : '';
-  const notificationBody = `Você tem ${dueCount} conta(s) pendente(s)${namesText}. Arraste para baixo e toque em "Marcar como Paga" para quitar!`;
 
   if (Capacitor.isNativePlatform()) {
     try {
@@ -199,7 +199,7 @@ export async function syncDueBillsRecurringReminders(dueCount: number, billNames
 
       // Cancel previous scheduled reminders before rescheduling
       const idsToCancel = [];
-      for (let i = 1; i <= REMINDER_COUNT; i++) {
+      for (let i = 1; i <= MAX_REMINDER_IDS; i++) {
         idsToCancel.push({ id: REMINDER_NOTIFICATION_BASE_ID + i });
       }
       await LocalNotifications.cancel({ notifications: idsToCancel });
@@ -207,41 +207,49 @@ export async function syncDueBillsRecurringReminders(dueCount: number, billNames
       const now = Date.now();
       const checkHours = [9, 13, 18, 21]; // 4 fixed clock slots per day
       const newNotifications = [];
-      let idx = 1;
+      let globalIdx = 1;
 
-      // Schedule across today and next 2 days so alarms persist even if app is closed for 48h
-      for (let dayOffset = 0; dayOffset < 3 && idx <= REMINDER_COUNT; dayOffset++) {
-        const targetDate = new Date();
-        targetDate.setDate(targetDate.getDate() + dayOffset);
+      const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
-        for (const h of checkHours) {
-          const checkTime = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), h, 0, 0);
-          if (checkTime.getTime() > now && idx <= REMINDER_COUNT) {
-            newNotifications.push({
-              id: REMINDER_NOTIFICATION_BASE_ID + idx++,
-              title: '⏰ Lembrete: Contas a Pagar',
-              body: notificationBody,
-              schedule: {
-                at: checkTime,
-                allowWhileIdle: true,
-              },
-              isExactNotification: true,
-              channelId: 'padrao',
-              actionTypeId: 'BILL_REMINDER_ACTIONS',
-              smallIcon: 'ic_stat_icon',
-              largeIcon: 'ic_stat_icon',
-              sound: 'default',
-            });
+      // For each item, schedule across today and next 2 days
+      allItems.forEach((item) => {
+        const amountFormatted = currencyFormatter.format(item.amount);
+        const title = `⏰ Conta Vencendo: ${item.title}`;
+        const body = `Valor: ${amountFormatted} - Vencimento: ${item.dueDate}. Toque em "Marcar como Paga" para quitar!`;
+
+        for (let dayOffset = 0; dayOffset < 3; dayOffset++) {
+          const targetDate = new Date();
+          targetDate.setDate(targetDate.getDate() + dayOffset);
+
+          for (const h of checkHours) {
+            const checkTime = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), h, 0, 0);
+            if (checkTime.getTime() > now && globalIdx <= MAX_REMINDER_IDS) {
+              newNotifications.push({
+                id: REMINDER_NOTIFICATION_BASE_ID + globalIdx++,
+                title,
+                body,
+                schedule: {
+                  at: checkTime,
+                  allowWhileIdle: true,
+                },
+                isExactNotification: true,
+                channelId: 'padrao',
+                actionTypeId: 'BILL_REMINDER_ACTIONS',
+                smallIcon: 'ic_stat_icon',
+                largeIcon: 'ic_stat_icon',
+                sound: 'default',
+              });
+            }
           }
         }
-      }
+      });
 
       if (newNotifications.length > 0) {
         await LocalNotifications.schedule({ notifications: newNotifications });
-        console.log(`Agendados ${newNotifications.length} lembretes nativos com ação "Marcar como Paga".`);
+        console.log(`Agendados ${newNotifications.length} lembretes individuais para ${allItems.length} contas.`);
       }
     } catch (err) {
-      console.warn('Erro ao agendar lembretes multidia com ação:', err);
+      console.warn('Erro ao agendar lembretes individuais de contas:', err);
     }
   }
 }

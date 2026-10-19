@@ -327,8 +327,8 @@ export default function App() {
     const totalDueCount = dueBills.length + dueTx.length;
     const names = [...dueBills.map((b) => b.title), ...dueTx.map((t) => t.description)];
 
-    // Schedule native background reminders on Android (controlled by Android OS even when app is closed)
-    syncDueBillsRecurringReminders(totalDueCount, names);
+    // Schedule individual native background reminders for each due bill/expense
+    syncDueBillsRecurringReminders(dueBills, dueTx);
   }, [data.bills, data.transactions]);
 
   // Handle notification action button clicks (e.g. 'Marcar como Paga')
