@@ -56,6 +56,7 @@ export interface Transaction {
   excludeFromTotals?: boolean;
   barcode?: string;
   pixCode?: string;
+  includeInCarDaily?: boolean;
 }
 
 export interface Bill {
@@ -76,6 +77,17 @@ export interface Bill {
   barcode?: string;
   pixCode?: string;
   installment?: { current: number; total: number };
+  includeInCarDaily?: boolean;
+  estorno?: {
+    status: 'pendente' | 'recebido';
+    amount?: number;
+    notes?: string;
+    purchaseDate?: string; // Data da compra
+    expectedDate?: string; // Data esperada para o estorno
+    cardName?: string; // Nome do cartão
+    storeName?: string; // Loja da compra
+  };
+  ignored?: boolean;
 }
 
 export interface HomeUtilityReading {

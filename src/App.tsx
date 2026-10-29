@@ -38,7 +38,7 @@ import {
   ModuleId,
   isVariableBill,
   Vehicle,
-  VehicleService
+  VehicleService,
 } from './types';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
@@ -47,6 +47,7 @@ import { IncomesModule } from './components/IncomesModule';
 import { AnalyticsModule } from './components/AnalyticsModule';
 import { TransactionModal } from './components/TransactionModal';
 import { BillModal } from './components/BillModal';
+import { EstornoModal } from './components/EstornoModal';
 import { CalculatorsModal } from './components/CalculatorsModal';
 import { AiAssistantModal } from './components/AiAssistantModal';
 import { HelpModal } from './components/HelpModal';
@@ -93,6 +94,7 @@ export default function App() {
   const [defaultDescriptionForTransaction, setDefaultDescriptionForTransaction] = useState<string>('');
 
   const [isBillModalOpen, setIsBillModalOpen] = useState(false);
+  const [isEstornoModalOpen, setIsEstornoModalOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
 
   const [isCalculatorsModalOpen, setIsCalculatorsModalOpen] = useState(false);
@@ -407,6 +409,11 @@ export default function App() {
       }
       if (isBillModalOpen) {
         setIsBillModalOpen(false);
+        setEditingBill(null);
+        hasModalOpen = true;
+      }
+      if (isEstornoModalOpen) {
+        setIsEstornoModalOpen(false);
         setEditingBill(null);
         hasModalOpen = true;
       }
@@ -1110,14 +1117,6 @@ export default function App() {
     });
   };
 
-  // Handler: Update Vehicle Odometer
-  const handleUpdateKm = useCallback((vehicleId: string, newKm: number) => {
-    setData((prev) => ({
-      ...prev,
-      vehicles: (prev.vehicles || []).map((v) => (v.id === vehicleId ? { ...v, currentKm: newKm } : v)),
-    }));
-  }, []);
-
   // Handler: Add Home Utility Reading
   const handleAddHomeReading = (newReading: Omit<HomeUtilityReading, 'id'>) => {
     const reading: HomeUtilityReading = {
@@ -1333,13 +1332,6 @@ export default function App() {
     }));
   };
 
-  const handleClearAllDailyLogs = () => {
-    setData((prev) => ({
-      ...prev,
-      dailyLogs: [],
-    }));
-  };
-
   const handleDeleteAllBudgets = () => {
     setData((prev) => ({
       ...prev,
@@ -1358,7 +1350,6 @@ export default function App() {
   const handleClearAllDataExceptFixed = () => {
     setData((prev) => ({
       ...prev,
-      dailyLogs: [],
       transactions: prev.transactions.filter((t) => t.category === 'Fixas'),
       vehicleServices: [],
       homeReadings: [],
@@ -1565,13 +1556,23 @@ export default function App() {
 
   const handleOpenNewBill = (scope: CategoryScope = 'casa') => {
     setEditingBill(null);
+    setBillModalMode('bill');
     setDefaultScopeForBill(scope);
     setIsBillModalOpen(true);
   };
 
+  const handleOpenNewEstorno = () => {
+    setEditingBill(null);
+    setIsEstornoModalOpen(true);
+  };
+
   const handleEditBill = (bill: Bill) => {
     setEditingBill(bill);
-    setIsBillModalOpen(true);
+    if (bill.estorno) {
+      setIsEstornoModalOpen(true);
+    } else {
+      setIsBillModalOpen(true);
+    }
   };
 
   const todayStr = getTodayStr();
@@ -1687,6 +1688,7 @@ export default function App() {
             onPayBill={handlePayBill}
             onDeleteBill={handleDeleteBill}
             onOpenNewBillModal={handleOpenNewBill}
+            onOpenNewEstornoModal={handleOpenNewEstorno}
             onEditBill={handleEditBill}
             onUpdateBill={handleUpdateBill}
             onEditTransaction={handleEditTransaction}
@@ -1713,6 +1715,7 @@ export default function App() {
             onDeleteTransaction={handleDeleteTransaction}
           />
         )}
+
       </main>
 
       {/* Modals */}
@@ -1744,6 +1747,17 @@ export default function App() {
         editingBill={editingBill}
         defaultScope={defaultScopeForBill}
         existingBills={data.bills}
+      />
+
+      <EstornoModal
+        isOpen={isEstornoModalOpen}
+        onClose={() => {
+          setIsEstornoModalOpen(false);
+          setEditingBill(null);
+        }}
+        onSave={handleSaveBill}
+        onDelete={handleDeleteBill}
+        editingBill={editingBill}
       />
 
       <CalculatorsModal
@@ -1817,6 +1831,7 @@ export default function App() {
           setActiveTab={handleSelectTab}
           pendingBillsCount={pendingBillsCount}
           onOpenNewBill={handleOpenNewBill}
+          onOpenNewEstorno={handleOpenNewEstorno}
           onOpenNewTransaction={(scope, cat, type) =>
             handleOpenNewTransactionAdvanced(scope || 'geral', cat || 'Outros', type || 'despesa')
           }

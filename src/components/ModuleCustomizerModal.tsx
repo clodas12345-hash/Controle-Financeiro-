@@ -14,7 +14,8 @@ import {
   GripVertical,
   ArrowUp,
   ArrowDown,
-  TrendingUp
+  TrendingUp,
+  Calendar
 } from 'lucide-react';
 import { ModuleId, ModuleSetting } from '../types';
 

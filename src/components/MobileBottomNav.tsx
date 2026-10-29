@@ -21,6 +21,7 @@ interface MobileBottomNavProps {
   setActiveTab: (tab: string) => void;
   pendingBillsCount: number;
   onOpenNewBill: () => void;
+  onOpenNewEstorno: () => void;
   onOpenNewTransaction: (scope?: CategoryScope, category?: TransactionCategory, type?: TransactionType) => void;
   onOpenAiAssistant?: () => void;
   onOpenCalculators?: () => void;
@@ -33,6 +34,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   setActiveTab,
   pendingBillsCount,
   onOpenNewBill,
+  onOpenNewEstorno,
   onOpenNewTransaction,
   onOpenAiAssistant,
   onOpenCalculators,
@@ -165,7 +167,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   </div>
                   <div>
                     <h4 className="font-bold text-xs text-white">Assistente IA</h4>
-                    <p className="text-[10px] text-cyan-300/80">Voz / Recibo / Chat</p>
+                    <p className="text-[10px] text-cyan-300/80">Voz / Texto / Chat</p>
                   </div>
                 </button>
               )}
@@ -187,6 +189,22 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   </div>
                 </button>
               )}
+
+              <button
+                  onClick={() => {
+                    setIsActionSheetOpen(false);
+                    onOpenNewEstorno(); 
+                  }}
+                  className="flex items-center gap-3 p-3.5 rounded-2xl bg-amber-600/10 hover:bg-amber-600/20 border border-amber-600/20 text-left transition active:scale-95"
+                >
+                  <div className="p-2.5 rounded-xl bg-amber-600/20 text-amber-500">
+                    <span className="text-lg">🔄</span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-xs text-white">Estorno</h4>
+                    <p className="text-[10px] text-amber-300/80">Lançar reembolso</p>
+                  </div>
+                </button>
 
               {onOpenCreditCards && (
                 <button

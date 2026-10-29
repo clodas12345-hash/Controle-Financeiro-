@@ -15,7 +15,6 @@ const KEYS = {
   HOME_READINGS: 'fin_control_hreadings_v1',
   HOME_TASKS: 'fin_control_htasks_v1',
   BUDGETS: 'fin_control_budgets_v1',
-  DAILY_LOGS: 'fin_control_dailylogs_v1',
   CREDIT_CARDS: 'fin_control_credit_cards_v1',
   PETS: 'fin_control_pets_v1',
   PET_CARE: 'fin_control_pet_care_v1',
@@ -87,9 +86,7 @@ export function loadAllAppData() {
 
     const ensuredBills = loadOrInitial<Bill[]>(KEYS.BILLS, initialBills);
     const ensuredTransactions = loadOrInitial<Transaction[]>(KEYS.TRANSACTIONS, initialTransactions);
-    const loadedModules = loadData<ModuleId[]>(KEYS.ENABLED_MODULES, DEFAULT_ENABLED_MODULES).filter(
-      (m) => m !== ('diario' as any) && m !== ('carro' as any)
-    );
+    const loadedModules = loadData<ModuleId[]>(KEYS.ENABLED_MODULES, DEFAULT_ENABLED_MODULES);
 
     if (!loadedModules.includes('entradas')) {
       const contasIndex = loadedModules.indexOf('contas');
@@ -151,6 +148,7 @@ export function saveAllAppData(data: {
   companyProfile?: CompanyProfile;
   companyClients?: CompanyClient[];
   companyDocuments?: CompanyDocument[];
+  dailyLogs?: any[];
   enabledModules?: ModuleId[];
 }) {
   if (data.transactions !== undefined) saveData(KEYS.TRANSACTIONS, data.transactions);
@@ -211,7 +209,6 @@ export interface ResetCategorySelection {
   pets?: boolean;
   company?: boolean;
   vehicles?: boolean;
-  dailyLogs?: boolean;
 }
 
 export function resetSelectedCategories(

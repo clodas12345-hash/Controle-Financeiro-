@@ -20,7 +20,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Calculator,
-  Camera,
   CalendarClock,
   CopyX,
   ArrowUp
@@ -34,6 +33,7 @@ interface BillsModuleProps {
   onPayBill: (billId: string) => void;
   onDeleteBill: (billId: string) => void;
   onOpenNewBillModal: () => void;
+  onOpenNewEstornoModal?: () => void;
   onEditBill?: (bill: Bill) => void;
   onUpdateBill?: (bill: Bill) => void;
   onCopyBills?: (newBills: Bill[]) => void;
@@ -51,6 +51,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
   onPayBill,
   onDeleteBill,
   onOpenNewBillModal,
+  onOpenNewEstornoModal,
   onEditBill,
   onUpdateBill,
   onCopyBills,
@@ -64,7 +65,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
   const [statusFilter, setStatusFilter] = useState<'todos' | 'pendente' | 'pago' | 'atrasado' | 'meses_seguintes'>('todos');
   const [scopeFilter, setScopeFilter] = useState<'todos' | CategoryScope>('todos');
   const [paymentFilter, setPaymentFilter] = useState<'com_pagamento' | 'sem_pagamento' | 'todos'>('com_pagamento');
-  const [viewType, setViewType] = useState<'todos' | 'faturas' | 'despesas'>('todos');
+  const [viewType, setViewType] = useState<'todos' | 'faturas' | 'despesas' | 'estornos'>('todos');
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -276,6 +277,8 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
     excludeFromTotals?: boolean;
     installment?: { current: number; total: number };
     includeInCarDaily?: boolean;
+    recipient?: string;
+    estorno?: Bill['estorno'];
     original: Bill | Transaction;
   }
 
@@ -299,6 +302,8 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
         excludeFromTotals: b.excludeFromTotals,
         installment: b.installment,
         includeInCarDaily: b.includeInCarDaily,
+        recipient: b.recipient,
+        estorno: b.estorno,
         original: b,
       });
     });
@@ -328,6 +333,15 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
   }
 
   const filteredItems = unifiedItems.filter((item) => {
+    if (viewType === 'estornos') return !!item.estorno;
+    if (viewType === 'faturas') return !item.isTransaction && !item.estorno;
+    if (viewType === 'despesas') return item.isTransaction && !item.estorno;
+    
+    // Na visualização "Tudo Unificado", vamos ocultar estornos para dar foco em contas,
+    // ou deixá-los? O usuário pediu para SEPARAR. Então em "Tudo" talvez não deva mostrar estorno?
+    // "Separar a aba estorno da aba conta" sugere que eles não devem se misturar.
+    if (viewType === 'todos' && item.estorno) return false;
+
     const itemMonth = (item.dueDate || '').slice(0, 7);
     if (viewMonthStr !== 'todos' && itemMonth !== viewMonthStr) {
       return false;
@@ -369,9 +383,10 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
   });
 
   const currentYearStr = `${now.getFullYear()}`;
+  const targetMonthFilter = viewMonthStr !== 'todos' ? viewMonthStr : currentMonthStr;
 
   const monthPending = bills
-    .filter((b) => (b.status === 'pendente' || b.status === 'atrasado') && b.paymentMethod !== 'SEM PAGAMENTO' && b.dueDate.startsWith(currentMonthStr))
+    .filter((b) => (b.status === 'pendente' || b.status === 'atrasado') && b.paymentMethod !== 'SEM PAGAMENTO' && b.dueDate.startsWith(targetMonthFilter))
     .reduce((acc, b) => acc + b.amount, 0);
 
   const yearPending = bills
@@ -379,12 +394,15 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
     .reduce((acc, b) => acc + b.amount, 0);
 
   const monthPaid = bills
-    .filter((b) => b.status === 'pago' && b.dueDate.startsWith(currentMonthStr))
+    .filter((b) => b.status === 'pago' && b.dueDate.startsWith(targetMonthFilter))
     .reduce((acc, b) => acc + b.amount, 0);
 
   const yearPaid = bills
     .filter((b) => b.status === 'pago' && b.dueDate.startsWith(currentYearStr))
     .reduce((acc, b) => acc + b.amount, 0);
+
+  const pendingEstornos = bills.filter(b => b.estorno && b.estorno.status === 'pendente');
+  const hasPendingEstornos = pendingEstornos.length > 0;
 
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -411,7 +429,9 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
 
         <div className="flex flex-wrap items-center gap-3" onClick={(e) => e.stopPropagation()}>
           <div className="bg-[#1A1A1C] px-5 py-2.5 rounded-2xl border border-white/10 text-right">
-            <div className="text-[10px] text-white/40 uppercase tracking-wider">A Pagar no Mês</div>
+            <div className="text-[10px] text-white/40 uppercase tracking-wider">
+              {viewMonthStr === 'todos' ? 'A Pagar (Todos)' : `A Pagar em ${formatMonthName(viewMonthStr).split(' de ')[0]}`}
+            </div>
             <div className="text-xl font-medium text-amber-400">{formatBRL(monthPending)}</div>
             <div className="text-[11px] text-white/50 pt-1 mt-1 border-t border-white/5">
               Acumulado no ano: <span className="text-white font-medium">{formatBRL(yearPending)}</span>
@@ -419,7 +439,9 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
           </div>
 
           <div className="bg-[#1A1A1C] px-5 py-2.5 rounded-2xl border border-white/10 text-right hidden sm:block">
-            <div className="text-[10px] text-white/40 uppercase tracking-wider">Quitados no Mês</div>
+            <div className="text-[10px] text-white/40 uppercase tracking-wider">
+              {viewMonthStr === 'todos' ? 'Quitados (Todos)' : `Quitados em ${formatMonthName(viewMonthStr).split(' de ')[0]}`}
+            </div>
             <div className="text-xl font-medium text-emerald-400">{formatBRL(monthPaid)}</div>
             <div className="text-[11px] text-white/50 pt-1 mt-1 border-t border-white/5">
               Acumulado no ano: <span className="text-white font-medium">{formatBRL(yearPaid)}</span>
@@ -435,13 +457,18 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
             <span>Nova Conta</span>
           </button>
           <button
-            onClick={() => onOpenNewBillModal()}
-            className="px-4 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-bold text-xs rounded-2xl transition-all border border-amber-500/20 flex items-center gap-2 cursor-pointer shadow-[0_0_12px_rgba(245,158,11,0.15)]"
-            title="Adicionar Conta com Câmera"
+            onClick={() => setViewType('estornos')}
+            className={`px-4 py-2.5 bg-amber-600/20 hover:bg-amber-600/30 text-amber-500 font-bold text-xs rounded-2xl transition-all border border-amber-600/30 flex items-center gap-2 cursor-pointer shadow-[0_0_12px_rgba(217,119,6,0.15)] ${hasPendingEstornos ? 'animate-pulse ring-2 ring-amber-500/50' : ''}`}
+            title="Ver lançamentos de Estorno / Reembolso"
           >
-            <Camera className="w-4 h-4 stroke-[2.5]" />
-            <span className="hidden sm:inline">Câmera / Scanner</span>
-            <span className="sm:hidden">Câmera / Scanner</span>
+            <RefreshCw className={`w-4 h-4 stroke-[2.5] ${hasPendingEstornos ? 'animate-spin-slow' : ''}`} />
+            <span>Estorno</span>
+            {hasPendingEstornos && (
+              <span className="ml-1 flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+              </span>
+            )}
           </button>
           {onSyncMonthlyBills && (
             <button
@@ -464,18 +491,6 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
             </button>
           )}
 
-          {onDeleteDuplicateBills && (
-            <button
-              type="button"
-              onClick={onDeleteDuplicateBills}
-              className="px-3.5 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold text-xs rounded-2xl transition-all border border-rose-500/20 flex items-center gap-1.5 cursor-pointer"
-              title="Detectar e remover contas duplicadas neste mês ou em outros"
-            >
-              <CopyX className="w-4 h-4 stroke-[2.5]" />
-              <span className="hidden sm:inline">Remover Duplicadas</span>
-              <span className="sm:hidden">Limpar Duplicadas</span>
-            </button>
-          )}
 
         </div>
       </div>
@@ -631,6 +646,16 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                 >
                   Despesas Lançadas (Casa/Carro)
                 </button>
+                <button
+                  onClick={() => setViewType('estornos')}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition ${
+                    viewType === 'estornos'
+                      ? 'bg-amber-500 text-slate-950 font-extrabold shadow-[0_0_8px_rgba(245,158,11,0.2)]'
+                      : 'bg-[#1A1A1C] text-white/40 hover:text-white border border-white/5'
+                  }`}
+                >
+                  Estornos / Reembolsos
+                </button>
               </div>
             </div>
 
@@ -754,7 +779,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                       const isPending = item.status === 'pendente';
                       const isOverdue = item.status === 'atrasado';
                       const isPastMonth = item.dueDate.slice(0, 7) < currentMonthStr;
-                      const needsUpdate = !isPaid && isPastMonth;
+                      const needsUpdate = !isPaid && isPastMonth && !(item.original as Bill).ignored;
 
                       return (
                         <div key={item.id} className="flex flex-col gap-2 relative overflow-hidden rounded-2xl">
@@ -776,38 +801,51 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                           title="Clique para abrir os dados da conta (código de barras, PIX, valores e vencimento)"
                         >
                           {needsUpdate && (
-                            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center border border-amber-500/30 rounded-2xl">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const [y, m, d] = item.dueDate.split('-');
-                                  const [cy, cm] = currentMonthStr.split('-');
-                                  const maxDays = new Date(Number(cy), Number(cm), 0).getDate();
-                                  const targetDay = Math.min(Number(d), maxDays);
-                                  const newDate = `${cy}-${cm}-${String(targetDay).padStart(2, '0')}`;
-                                  
-                                  if (item.isTransaction) {
-                                    onUpdateTransaction && onUpdateTransaction({
-                                      ...(item.original as any),
-                                      date: newDate,
-                                      paid: false
-                                    });
-                                  } else {
-                                    onUpdateBill && onUpdateBill({
-                                      ...(item.original as any),
-                                      dueDate: newDate,
-                                      status: 'pendente'
-                                    });
-                                  }
-                                }}
-                                className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm rounded-xl transition flex items-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
-                              >
-                                <RefreshCw className="w-4 h-4" />
-                                Atualizar para {formatMonthName(currentMonthStr)}
-                              </button>
-                              <p className="text-amber-400/80 text-[10px] mt-2 font-medium uppercase tracking-wider">
-                                Conta de {formatMonthName(item.dueDate.slice(0, 7))} não quitada
-                              </p>
+                            <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-[4px] z-10 flex flex-col items-center justify-center border border-amber-500/30 rounded-2xl p-4 text-center">
+                              <p className="text-amber-100 font-bold text-sm mb-2">Conta pendente: {item.title}</p>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const [y, m, d] = item.dueDate.split('-');
+                                    const [cy, cm] = currentMonthStr.split('-');
+                                    const maxDays = new Date(Number(cy), Number(cm), 0).getDate();
+                                    const targetDay = Math.min(Number(d), maxDays);
+                                    const newDate = `${cy}-${cm}-${String(targetDay).padStart(2, '0')}`;
+                                    
+                                    if (item.isTransaction) {
+                                      onUpdateTransaction && onUpdateTransaction({
+                                        ...(item.original as any),
+                                        date: newDate,
+                                        paid: false
+                                      });
+                                    } else {
+                                      onUpdateBill && onUpdateBill({
+                                        ...(item.original as any),
+                                        dueDate: newDate,
+                                        status: 'pendente'
+                                      });
+                                    }
+                                  }}
+                                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition shadow-md"
+                                >
+                                  Atualizar para {formatMonthName(currentMonthStr)}
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (onUpdateBill) {
+                                      onUpdateBill({
+                                        ...(item.original as any),
+                                        ignored: true
+                                      });
+                                    }
+                                  }}
+                                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition"
+                                >
+                                  Ignorar
+                                </button>
+                              </div>
                             </div>
                           )}
                           
@@ -860,12 +898,46 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
 
                                 
 
-                                {item.installment && (
-                                  <span className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full font-bold">
-                                    Parcela {item.installment.current}/{item.installment.total}
-                                  </span>
+                                  {item.installment && (
+                                    <span className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full font-bold">
+                                      Parcela {item.installment.current}/{item.installment.total}
+                                    </span>
+                                  )}
+
+                                  {item.includeInCarDaily && (
+                                    <span className="text-[10px] px-2 py-0.5 bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-full font-bold flex items-center gap-1">
+                                      <Car className="w-3 h-3" />
+                                      Carro
+                                    </span>
+                                  )}
+
+                                  {item.estorno && (
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 ${
+                                      item.estorno.status === 'pendente'
+                                        ? 'bg-amber-500/30 text-amber-300 border-amber-500 animate-pulse'
+                                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                    }`}>
+                                      <span>🔄 Estorno:</span>
+                                      <span>{item.estorno.status === 'pendente' ? 'Pendente ⏳' : 'Recebido ✅'}</span>
+                                      {item.estorno.amount ? `(${formatBRL(item.estorno.amount)})` : ''}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {item.recipient && (
+                                  <div className="text-[11px] text-white/70 mt-1 flex items-center gap-1.5 bg-white/5 border border-white/10 px-2 py-0.5 rounded-lg w-fit">
+                                    <span className="font-bold text-white/50">Favorecido:</span>
+                                    <span>{item.recipient}</span>
+                                  </div>
                                 )}
-                              </div>
+
+                                {item.estorno && (
+                                  <div className="text-[11px] text-emerald-400 mt-1 flex flex-wrap items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-lg w-fit">
+                                    <RefreshCw className="w-3 h-3" />
+                                    {item.estorno.cardName && <span className="bg-emerald-500/20 px-1.5 rounded text-[10px]">{item.estorno.cardName}</span>}
+                                    {item.estorno.storeName && <span className="bg-emerald-500/20 px-1.5 rounded text-[10px]">{item.estorno.storeName}</span>}
+                                  </div>
+                                )}
 
                               {item.notes && (
                                 <div className="text-xs text-amber-300/90 italic mt-1 flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg w-fit">
@@ -1266,7 +1338,30 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                             Parcela {item.installment.current}/{item.installment.total}
                           </span>
                         )}
+
+                        {item.includeInCarDaily && (
+                          <span className="text-[10px] px-2 py-0.5 bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-full font-bold flex items-center gap-1">
+                            <Car className="w-3 h-3" />
+                            Carro
+                          </span>
+                        )}
                       </div>
+
+                      {item.recipient && (
+                        <div className="text-[11px] text-white/70 mt-1 flex items-center gap-1.5 bg-white/5 border border-white/10 px-2 py-0.5 rounded-lg w-fit">
+                          <span className="font-bold text-white/50">Favorecido:</span>
+                          <span>{item.recipient}</span>
+                        </div>
+                      )}
+
+                      {item.estorno && (
+                        <div className="text-[11px] text-emerald-400 mt-1 flex flex-wrap items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-lg w-fit">
+                          <RefreshCw className="w-3 h-3" />
+                          <span className="font-bold">Estorno {item.estorno.status === 'pendente' ? 'Pendente' : 'Recebido'}:</span>
+                          {item.estorno.cardName && <span className="bg-emerald-500/20 px-1.5 rounded text-[10px]">{item.estorno.cardName}</span>}
+                          {item.estorno.storeName && <span className="bg-emerald-500/20 px-1.5 rounded text-[10px]">{item.estorno.storeName}</span>}
+                        </div>
+                      )}
 
                       {item.notes && (
                         <div className="text-xs text-amber-300/90 italic mt-1 flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg w-fit">
