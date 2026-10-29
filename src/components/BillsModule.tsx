@@ -25,7 +25,7 @@ import {
   ArrowUp
 } from 'lucide-react';
 import { Bill, CategoryScope, Transaction, TransactionCategory, PaymentMethod, isVariableBill } from '../types';
-import { formatBRL, formatDateBR, getDueDateBusinessInfo, getEffectiveDueDate } from '../lib/storage';
+import { formatBRL, formatDateBR, getDueDateBusinessInfo, getEffectiveDueDate, getTodayStr } from '../lib/storage';
 
 interface BillsModuleProps {
   bills: Bill[];
@@ -88,6 +88,14 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
   const now = new Date();
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const [viewMonthStr, setViewMonthStr] = useState<string>(currentMonthStr);
+
+  // Sincronização automática das contas do mês selecionado com base no mês anterior
+  useEffect(() => {
+    if (onSyncMonthlyBills) {
+      const target = viewMonthStr !== 'todos' ? viewMonthStr : currentMonthStr;
+      onSyncMonthlyBills(target);
+    }
+  }, [viewMonthStr, currentMonthStr, onSyncMonthlyBills]);
 
   // Generate the upcoming 6 months forward from the current month (e.g. Outubro 2026, Novembro 2026, etc.)
   const upcomingMonths = React.useMemo(() => {
@@ -401,8 +409,46 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
     .filter((b) => b.status === 'pago' && b.dueDate.startsWith(currentYearStr))
     .reduce((acc, b) => acc + b.amount, 0);
 
+  const allEstornos = bills.filter(b => !!b.estorno);
   const pendingEstornos = bills.filter(b => b.estorno && b.estorno.status === 'pendente');
+  const receivedEstornos = bills.filter(b => b.estorno && b.estorno.status === 'recebido');
   const hasPendingEstornos = pendingEstornos.length > 0;
+  const pendingEstornosTotal = pendingEstornos.reduce((acc, b) => acc + (b.estorno?.amount || b.amount || 0), 0);
+
+  const [isEstornosListModalOpen, setIsEstornosListModalOpen] = useState(false);
+  const [estornoFilterTab, setEstornoFilterTab] = useState<'pendente' | 'recebido' | 'todos'>('pendente');
+
+  const handleConfirmEstornoReceipt = (bill: Bill) => {
+    if (!bill.estorno) return;
+    const updatedBill: Bill = {
+      ...bill,
+      status: 'pago',
+      paidDate: getTodayStr(),
+      estorno: {
+        ...bill.estorno,
+        status: 'recebido',
+      },
+    };
+    if (onUpdateBill) {
+      onUpdateBill(updatedBill);
+    }
+  };
+
+  const handleRevertEstornoToPending = (bill: Bill) => {
+    if (!bill.estorno) return;
+    const updatedBill: Bill = {
+      ...bill,
+      status: 'pendente',
+      paidDate: undefined,
+      estorno: {
+        ...bill.estorno,
+        status: 'pendente',
+      },
+    };
+    if (onUpdateBill) {
+      onUpdateBill(updatedBill);
+    }
+  };
 
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -428,68 +474,51 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
         </div>
 
         <div className="flex flex-wrap items-center gap-3" onClick={(e) => e.stopPropagation()}>
-          <div className="bg-[#1A1A1C] px-5 py-2.5 rounded-2xl border border-white/10 text-right">
-            <div className="text-[10px] text-white/40 uppercase tracking-wider">
-              {viewMonthStr === 'todos' ? 'A Pagar (Todos)' : `A Pagar em ${formatMonthName(viewMonthStr).split(' de ')[0]}`}
+          <div className="bg-[#1A1A1C] px-6 py-4 rounded-3xl border border-white/15 text-right min-w-[280px] shadow-lg">
+            <div className="text-xs text-white/50 uppercase tracking-wider flex items-center justify-between gap-3 mb-1">
+              <span>{viewMonthStr === 'todos' ? 'A Pagar (Todos)' : `A Pagar em ${formatMonthName(viewMonthStr).split(' de ')[0]}`}</span>
             </div>
-            <div className="text-xl font-medium text-amber-400">{formatBRL(monthPending)}</div>
-            <div className="text-[11px] text-white/50 pt-1 mt-1 border-t border-white/5">
-              Acumulado no ano: <span className="text-white font-medium">{formatBRL(yearPending)}</span>
+            <div className="flex items-center justify-between gap-4 my-1.5">
+              <div className="text-2xl sm:text-3xl font-extrabold text-amber-400 tracking-tight">{formatBRL(monthPending)}</div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEstornoFilterTab('pendente');
+                  setIsEstornosListModalOpen(true);
+                  setViewType('estornos');
+                }}
+                className={`px-3.5 py-2 font-bold text-xs rounded-xl transition-all border flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                  hasPendingEstornos
+                    ? 'bg-rose-500/25 hover:bg-rose-500/35 text-rose-400 border-rose-500/70 shadow-[0_0_15px_rgba(244,63,94,0.4)] animate-pulse ring-2 ring-rose-500/50'
+                    : 'bg-white/5 hover:bg-white/10 text-white/70 border-white/10'
+                }`}
+                title="Ver lista de todos os estornos que você está aguardando"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 stroke-[2.5] ${hasPendingEstornos ? 'animate-spin-slow text-rose-400' : 'text-white/60'}`} />
+                <span>Estorno</span>
+                {hasPendingEstornos && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-extrabold shadow-sm">
+                    {pendingEstornos.length}
+                  </span>
+                )}
+              </button>
+            </div>
+            <div className="text-xs text-white/60 pt-2 mt-1 border-t border-white/10 flex items-center justify-between">
+              <span>Acumulado no ano:</span>
+              <span className="text-white font-bold">{formatBRL(yearPending)}</span>
             </div>
           </div>
 
-          <div className="bg-[#1A1A1C] px-5 py-2.5 rounded-2xl border border-white/10 text-right hidden sm:block">
-            <div className="text-[10px] text-white/40 uppercase tracking-wider">
+          <div className="bg-[#1A1A1C] px-6 py-4 rounded-3xl border border-white/15 text-right hidden sm:block min-w-[240px] shadow-lg">
+            <div className="text-xs text-white/50 uppercase tracking-wider mb-1">
               {viewMonthStr === 'todos' ? 'Quitados (Todos)' : `Quitados em ${formatMonthName(viewMonthStr).split(' de ')[0]}`}
             </div>
-            <div className="text-xl font-medium text-emerald-400">{formatBRL(monthPaid)}</div>
-            <div className="text-[11px] text-white/50 pt-1 mt-1 border-t border-white/5">
-              Acumulado no ano: <span className="text-white font-medium">{formatBRL(yearPaid)}</span>
+            <div className="text-2xl sm:text-3xl font-extrabold text-emerald-400 my-1.5 tracking-tight">{formatBRL(monthPaid)}</div>
+            <div className="text-xs text-white/60 pt-2 mt-1 border-t border-white/10 flex items-center justify-between">
+              <span>Acumulado no ano:</span>
+              <span className="text-white font-bold">{formatBRL(yearPaid)}</span>
             </div>
           </div>
-
-          <button
-            onClick={() => onOpenNewBillModal()}
-            className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-2xl transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)] flex items-center gap-2 cursor-pointer"
-            title="Adicionar Manualmente"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>Nova Conta</span>
-          </button>
-          <button
-            onClick={() => setViewType('estornos')}
-            className={`px-4 py-2.5 bg-amber-600/20 hover:bg-amber-600/30 text-amber-500 font-bold text-xs rounded-2xl transition-all border border-amber-600/30 flex items-center gap-2 cursor-pointer shadow-[0_0_12px_rgba(217,119,6,0.15)] ${hasPendingEstornos ? 'animate-pulse ring-2 ring-amber-500/50' : ''}`}
-            title="Ver lançamentos de Estorno / Reembolso"
-          >
-            <RefreshCw className={`w-4 h-4 stroke-[2.5] ${hasPendingEstornos ? 'animate-spin-slow' : ''}`} />
-            <span>Estorno</span>
-            {hasPendingEstornos && (
-              <span className="ml-1 flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-              </span>
-            )}
-          </button>
-          {onSyncMonthlyBills && (
-            <button
-              type="button"
-              onClick={() => {
-                const targetM = viewMonthStr !== 'todos' ? viewMonthStr : currentMonthStr;
-                const count = onSyncMonthlyBills(targetM);
-                if (count > 0) {
-                  alert(`✅ ${count} conta(s) mensais foram atualizadas/sincronizadas para ${formatMonthName(targetM)}!`);
-                } else {
-                  alert(`ℹ️ Todas as contas mensais recorrentes já estão sincronizadas para ${formatMonthName(targetM)}.`);
-                }
-              }}
-              className="px-4 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold text-xs rounded-2xl transition-all border border-emerald-500/20 flex items-center gap-2 cursor-pointer shadow-[0_0_12px_rgba(16,185,129,0.15)]"
-              title="Gerar / Atualizar Contas Recorrentes para o Mês Selecionado"
-            >
-              <RefreshCw className="w-4 h-4 stroke-[2.5]" />
-              <span className="hidden sm:inline">Atualizar Contas Mensais</span>
-              <span className="sm:hidden">Atualizar Mensal</span>
-            </button>
-          )}
 
 
         </div>
@@ -914,11 +943,11 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                                   {item.estorno && (
                                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 ${
                                       item.estorno.status === 'pendente'
-                                        ? 'bg-amber-500/30 text-amber-300 border-amber-500 animate-pulse'
+                                        ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
                                         : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                                     }`}>
                                       <span>🔄 Estorno:</span>
-                                      <span>{item.estorno.status === 'pendente' ? 'Pendente ⏳' : 'Recebido ✅'}</span>
+                                      <span>{item.estorno.status === 'pendente' ? 'Aguardando ⏳' : 'Recebido ✅'}</span>
                                       {item.estorno.amount ? `(${formatBRL(item.estorno.amount)})` : ''}
                                     </span>
                                   )}
@@ -1029,7 +1058,9 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        if (item.isTransaction) {
+                                        if (item.estorno) {
+                                          handleConfirmEstornoReceipt(item.original as Bill);
+                                        } else if (item.isTransaction) {
                                           onUpdateTransaction && onUpdateTransaction({
                                             ...(item.original as Transaction),
                                             paid: true,
@@ -1038,17 +1069,23 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                                           onPayBill(item.id);
                                         }
                                       }}
-                                      className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                                      className={`px-3.5 py-2 font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-sm cursor-pointer ${
+                                        item.estorno
+                                          ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-rose-500/20'
+                                          : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                                      }`}
                                     >
                                       <CheckCircle2 className="w-4 h-4" />
-                                      <span>Pagar</span>
+                                      <span>{item.estorno ? 'Confirmar Recebimento' : 'Pagar'}</span>
                                     </button>
                                   ) : (
                                     <button
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        if (item.isTransaction) {
+                                        if (item.estorno) {
+                                          handleRevertEstornoToPending(item.original as Bill);
+                                        } else if (item.isTransaction) {
                                           onUpdateTransaction && onUpdateTransaction({
                                             ...(item.original as Transaction),
                                             paid: false,
@@ -1057,7 +1094,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                                           onPayBill(item.id);
                                         }
                                       }}
-                                      className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 font-semibold text-xs rounded-xl transition flex items-center gap-1.5"
+                                      className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 font-semibold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
                                     >
                                       <X className="w-4 h-4" />
                                       <span>Desfazer</span>
@@ -1345,6 +1382,18 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                             Carro
                           </span>
                         )}
+
+                        {item.estorno && (
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 ${
+                            item.estorno.status === 'pendente'
+                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
+                              : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          }`}>
+                            <span>🔄 Estorno:</span>
+                            <span>{item.estorno.status === 'pendente' ? 'Aguardando ⏳' : 'Recebido ✅'}</span>
+                            {item.estorno.amount ? `(${formatBRL(item.estorno.amount)})` : ''}
+                          </span>
+                        )}
                       </div>
 
                       {item.recipient && (
@@ -1453,7 +1502,9 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (item.isTransaction) {
+                                if (item.estorno) {
+                                  handleConfirmEstornoReceipt(item.original as Bill);
+                                } else if (item.isTransaction) {
                                   onUpdateTransaction && onUpdateTransaction({
                                     ...(item.original as Transaction),
                                     paid: true,
@@ -1462,17 +1513,23 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                                   onPayBill(item.id);
                                 }
                               }}
-                              className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                              className={`px-3.5 py-2 font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-sm cursor-pointer ${
+                                item.estorno
+                                  ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-rose-500/20'
+                                  : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                              }`}
                             >
                               <CheckCircle2 className="w-4 h-4" />
-                              <span>Pagar</span>
+                              <span>{item.estorno ? 'Confirmar Recebimento' : 'Pagar'}</span>
                             </button>
                           ) : (
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (item.isTransaction) {
+                                if (item.estorno) {
+                                  handleRevertEstornoToPending(item.original as Bill);
+                                } else if (item.isTransaction) {
                                   onUpdateTransaction && onUpdateTransaction({
                                     ...(item.original as Transaction),
                                     paid: false,
@@ -1481,7 +1538,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                                   onPayBill(item.id);
                                 }
                               }}
-                              className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 font-semibold text-xs rounded-xl transition flex items-center gap-1.5"
+                              className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 font-semibold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
                             >
                               <X className="w-4 h-4" />
                               <span>Desfazer</span>
@@ -1741,6 +1798,260 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
         </button>
       </div>
       </div>
+      )}
+
+      {/* Modal: Lista de Estornos Aguardando Confirmação */}
+      {isEstornosListModalOpen && (
+        <div 
+          className="fixed inset-0 z-[70] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-fadeIn"
+          onClick={() => setIsEstornosListModalOpen(false)}
+        >
+          <div 
+            className="bg-[#141416] border border-rose-500/30 rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 bg-[#1A1A1E]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
+                  <RefreshCw className="w-5 h-5 animate-spin-slow" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    Estornos & Reembolsos
+                    {pendingEstornos.length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-rose-500 text-white font-extrabold animate-pulse">
+                        {pendingEstornos.length} aguardando
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-white/50 mt-0.5">
+                    {pendingEstornos.length > 0
+                      ? `Total a receber: ${formatBRL(pendingEstornosTotal)}`
+                      : 'Todos os estornos foram recebidos'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEstornosListModalOpen(false)}
+                className="p-2 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Filter Tabs inside modal */}
+            <div className="px-5 pt-3 pb-2 border-b border-white/5 bg-[#17171A] flex items-center gap-2 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setEstornoFilterTab('pendente')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  estornoFilterTab === 'pendente'
+                    ? 'bg-rose-500 text-white shadow-md'
+                    : 'bg-[#1F1F24] text-white/50 hover:text-white'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Aguardando ({pendingEstornos.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setEstornoFilterTab('recebido')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  estornoFilterTab === 'recebido'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md'
+                    : 'bg-[#1F1F24] text-white/50 hover:text-white'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Recebidos ({receivedEstornos.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setEstornoFilterTab('todos')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  estornoFilterTab === 'todos'
+                    ? 'bg-white/20 text-white shadow-md'
+                    : 'bg-[#1F1F24] text-white/50 hover:text-white'
+                }`}
+              >
+                <span>Todos ({allEstornos.length})</span>
+              </button>
+            </div>
+
+            {/* Modal Body - Items List */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1">
+              {(() => {
+                const listToDisplay =
+                  estornoFilterTab === 'pendente'
+                    ? pendingEstornos
+                    : estornoFilterTab === 'recebido'
+                    ? receivedEstornos
+                    : allEstornos;
+
+                if (listToDisplay.length === 0) {
+                  return (
+                    <div className="p-8 text-center bg-black/20 rounded-2xl border border-white/5 my-2">
+                      <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2 opacity-80" />
+                      <p className="text-white font-bold text-sm">
+                        {estornoFilterTab === 'pendente'
+                          ? 'Nenhum estorno aguardando no momento!'
+                          : 'Nenhum estorno cadastrado nesta categoria.'}
+                      </p>
+                      <p className="text-white/40 text-xs mt-1">
+                        {estornoFilterTab === 'pendente'
+                          ? 'Todos os reembolsos cadastrados já foram confirmados.'
+                          : 'Cadastre um estorno para acompanhar o reembolso do seu cartão.'}
+                      </p>
+                    </div>
+                  );
+                }
+
+                return listToDisplay.map((bill) => {
+                  const est = bill.estorno;
+                  const isPending = est?.status === 'pendente';
+                  const amountVal = est?.amount || bill.amount || 0;
+
+                  return (
+                    <div
+                      key={bill.id}
+                      className={`p-4 rounded-2xl border transition space-y-3 ${
+                        isPending
+                          ? 'bg-[#1A1A1E] border-rose-500/30 hover:border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.1)]'
+                          : 'bg-[#161618] border-white/10 hover:border-white/20'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-sm font-bold text-white flex items-center gap-2 truncate">
+                            {est?.storeName || bill.title}
+                          </h4>
+                          <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-white/60">
+                            {est?.cardName && (
+                              <span className="px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-white/80 font-medium text-[11px] flex items-center gap-1">
+                                <CreditCard className="w-3 h-3 text-amber-400" />
+                                {est.cardName}
+                              </span>
+                            )}
+                            {est?.purchaseDate && (
+                              <span className="text-[11px] text-white/50">
+                                Compra: <strong className="text-white/80">{formatDateBR(est.purchaseDate)}</strong>
+                              </span>
+                            )}
+                            {(est?.expectedDate || bill.dueDate) && (
+                              <span className="text-[11px] text-white/50">
+                                Previsão: <strong className="text-amber-400">{formatDateBR(est?.expectedDate || bill.dueDate)}</strong>
+                              </span>
+                            )}
+                          </div>
+                          {est?.notes && (
+                            <p className="text-[11px] text-white/50 mt-1 italic line-clamp-2">
+                              {est.notes}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span className="text-[10px] text-white/40 uppercase font-semibold block">Valor a Receber</span>
+                          <span className="text-base font-extrabold text-emerald-400">{formatBRL(amountVal)}</span>
+                        </div>
+                      </div>
+
+                      {/* Status & Action Buttons */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5">
+                        <div>
+                          {isPending ? (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1.5 animate-pulse">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
+                              <span>Aguardando Reembolso</span>
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>Reembolso Recebido</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {isPending ? (
+                            <button
+                              type="button"
+                              onClick={() => handleConfirmEstornoReceipt(bill)}
+                              className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-md cursor-pointer"
+                              title="Marcar estorno como recebido"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>Confirmar Recebimento</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleRevertEstornoToPending(bill)}
+                              className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-white/50 hover:text-white text-xs rounded-xl transition cursor-pointer"
+                              title="Voltar para status aguardando"
+                            >
+                              <span>Voltar para Aguardando</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsEstornosListModalOpen(false);
+                              onEditBill && onEditBill(bill);
+                            }}
+                            className="p-1.5 text-white/40 hover:text-amber-400 hover:bg-white/10 rounded-xl transition cursor-pointer"
+                            title="Editar Dados do Estorno"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`Deseja excluir o estorno "${est?.storeName || bill.title}"?`)) {
+                                onDeleteBill(bill.id);
+                              }
+                            }}
+                            className="p-1.5 text-white/40 hover:text-rose-400 hover:bg-white/10 rounded-xl transition cursor-pointer"
+                            title="Excluir Estorno"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-[#1A1A1E] border-t border-white/10 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEstornosListModalOpen(false);
+                  onOpenNewEstornoModal && onOpenNewEstornoModal();
+                }}
+                className="px-4 py-2 bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-md cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Novo Estorno</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsEstornosListModalOpen(false)}
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs rounded-xl transition cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

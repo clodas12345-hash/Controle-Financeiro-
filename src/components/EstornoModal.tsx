@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, RefreshCw, Check, Trash2 } from 'lucide-react';
-import { Bill, getTodayStr, formatBRL } from '../lib/storage';
+import { Bill } from '../types';
+import { getTodayStr, formatBRL } from '../lib/storage';
 
 interface EstornoModalProps {
   isOpen: boolean;

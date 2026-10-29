@@ -20,6 +20,7 @@ import {
   getTodayStr,
   formatBRL,
   getEffectiveDueDate,
+  syncMonthlyBillsFromPreviousMonth,
 } from './lib/storage';
 import { exportAppToExcel } from './lib/excelExport';
 import { downloadFullBackupImmediately, restoreFullBackupFromJSON, saveAutomaticRestorePoint } from './lib/backupManager';
@@ -206,56 +207,14 @@ export default function App() {
       
       newTransactions = uniqueTx;
 
-      // 3. Auto-roll monthly recurring bills for current month
+      // 3. Auto-roll monthly recurring bills for current month based on previous month
       const currentMonthStr = getTodayStr().slice(0, 7);
-      const recurringMonthlyMap = new Map<string, Bill[]>();
-      for (const b of uniqueBills) {
-        if (b.recurring === 'mensal') {
-          const key = b.title.trim().toLowerCase();
-          if (!recurringMonthlyMap.has(key)) {
-            recurringMonthlyMap.set(key, []);
-          }
-          recurringMonthlyMap.get(key)!.push(b);
-        }
+      const syncResult = syncMonthlyBillsFromPreviousMonth(uniqueBills, currentMonthStr);
+      if (syncResult.changed) {
+        uniqueBills.length = 0;
+        uniqueBills.push(...syncResult.updatedBills);
+        changed = true;
       }
-
-      recurringMonthlyMap.forEach((billsList) => {
-        const sorted = [...billsList].sort((a, b) => b.dueDate.localeCompare(a.dueDate));
-        const previousBill = sorted.find((b) => !b.dueDate.startsWith(currentMonthStr)) || sorted[0];
-        const currentBill = billsList.find((b) => b.dueDate.startsWith(currentMonthStr));
-
-        if (currentBill) {
-          // Fixed bills (NOT credit card or energy) maintain exact same value from previous month
-          if (!isVariableBill(currentBill.title, currentBill.category) && previousBill && previousBill.id !== currentBill.id) {
-            if (currentBill.amount !== previousBill.amount) {
-              currentBill.amount = previousBill.amount;
-              changed = true;
-            }
-          }
-        } else if (previousBill) {
-          const day = parseInt(previousBill.dueDate.split('-')[2] || '1', 10);
-          const [year, month] = currentMonthStr.split('-').map(Number);
-          const maxDays = new Date(year, month, 0).getDate();
-          const targetDay = Math.min(day, maxDays);
-          const newDueDate = `${currentMonthStr}-${String(targetDay).padStart(2, '0')}`;
-
-          const newBill: Bill = {
-            id: `bill_auto_m_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-            title: previousBill.title,
-            amount: previousBill.amount,
-            dueDate: newDueDate,
-            category: previousBill.category,
-            scope: previousBill.scope,
-            paymentMethod: previousBill.paymentMethod,
-            status: 'pendente',
-            recurring: 'mensal',
-            excludeFromTotals: previousBill.excludeFromTotals,
-          };
-
-          uniqueBills.push(newBill);
-          changed = true;
-        }
-      });
 
       // 4. Sync Bills to Transactions
       for (const b of uniqueBills) {
@@ -1404,112 +1363,25 @@ export default function App() {
     setData(loadAllAppData());
   };
 
-  // Handler: Sync Monthly Recurring Bills
+  // Handler: Sync Monthly Recurring Bills based on previous month
   const handleSyncMonthlyBills = useCallback((targetMonthStr?: string) => {
     const today = getTodayStr();
     const currentMonth = targetMonthStr || today.slice(0, 7);
     let updatedOrAddedCount = 0;
 
     setData((prev) => {
-      const existingBills = [...prev.bills];
-      const recurringMonthlyMap = new Map<string, Bill[]>();
-
-      for (const b of existingBills) {
-        // Only process bills marked as monthly and not installments like (1/12)
-        const isInstallment = /\(\d+\/\d+\)/.test(b.title);
-        if (b.recurring === 'mensal' && !isInstallment) {
-          const scope = (b.scope || 'casa').toLowerCase();
-          const cleanTitle = b.title.trim().toLowerCase().replace(/\s+/g, ' ');
-          const key = `${scope}___${cleanTitle}`;
-          if (!recurringMonthlyMap.has(key)) {
-            recurringMonthlyMap.set(key, []);
-          }
-          recurringMonthlyMap.get(key)!.push(b);
-        }
-      }
-
-      let hasChanges = false;
-      const updatedBills = [...existingBills];
-
-      recurringMonthlyMap.forEach((billsList, groupKey) => {
-        const [groupScope, ...titleParts] = groupKey.split('___');
-        const cleanTitle = titleParts.join('___');
-
-        const sorted = [...billsList].sort((a, b) => b.dueDate.localeCompare(a.dueDate));
-        const previousBill = sorted.find((b) => !b.dueDate.startsWith(currentMonth)) || sorted[0];
-
-        // Check if ANY bill already exists in current month for this title and scope
-        const currentBillIndex = updatedBills.findIndex((b) => {
-          const bScope = (b.scope || 'casa').toLowerCase();
-          const bTitle = b.title.trim().toLowerCase().replace(/\s+/g, ' ');
-          return bScope === groupScope && bTitle === cleanTitle && (b.dueDate || '').startsWith(currentMonth);
-        });
-
-        if (currentBillIndex >= 0) {
-          // Bill already exists for this month: NEVER overwrite its amount, barcode, or pixCode.
-          // Values and payment codes are strictly individual for each month.
-        } else if (previousBill) {
-          // Bill does not exist for current month: create it as template with base amount, but WITHOUT copying previous barcode/pix
-          const day = parseInt(previousBill.dueDate.split('-')[2] || '1', 10);
-          const [year, month] = currentMonth.split('-').map(Number);
-          const maxDays = new Date(year, month, 0).getDate();
-          const targetDay = Math.min(day, maxDays);
-          const newDueDate = `${currentMonth}-${String(targetDay).padStart(2, '0')}`;
-
-          const newBill: Bill = {
-            id: `bill_auto_m_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-            title: previousBill.title,
-            amount: previousBill.amount,
-            dueDate: newDueDate,
-            category: previousBill.category,
-            scope: previousBill.scope,
-            paymentMethod: previousBill.paymentMethod,
-            status: 'pendente',
-            recurring: 'mensal',
-            excludeFromTotals: previousBill.excludeFromTotals,
-            barcode: undefined, // Barcode is strictly individual to each month
-            pixCode: undefined, // PIX is strictly individual to each month
-            recipient: previousBill.recipient,
-            notes: previousBill.notes,
-          };
-
-          updatedBills.push(newBill);
-          hasChanges = true;
-          updatedOrAddedCount++;
-        }
-      });
-
-      // Deduplicate pass across updatedBills to eliminate any existing duplicates for this month
-      const dedupMap = new Map<string, Bill>();
-      const finalBills: Bill[] = [];
-      for (const bill of updatedBills) {
-        const month = (bill.dueDate || '').slice(0, 7);
-        const titleKey = bill.title.toLowerCase().trim().replace(/\s+/g, ' ');
-        const scopeKey = (bill.scope || 'casa').toLowerCase();
-        const dKey = `${scopeKey}___${month}___${titleKey}`;
-
-        if (!dedupMap.has(dKey)) {
-          dedupMap.set(dKey, bill);
-          finalBills.push(bill);
-        } else {
-          // Duplicate detected - keep the paid one or the one with barcode/details
-          const existing = dedupMap.get(dKey)!;
-          if (existing.status !== 'pago' && bill.status === 'pago') {
-            const idx = finalBills.indexOf(existing);
-            if (idx >= 0) finalBills[idx] = bill;
-            dedupMap.set(dKey, bill);
-            hasChanges = true;
-          } else {
-            hasChanges = true;
-          }
-        }
-      }
-
-      if (hasChanges) {
-        return {
+      const { updatedBills, changed, count } = syncMonthlyBillsFromPreviousMonth(
+        prev.bills || [],
+        currentMonth
+      );
+      updatedOrAddedCount = count;
+      if (changed) {
+        const nextData = {
           ...prev,
-          bills: finalBills,
+          bills: updatedBills,
         };
+        saveAllAppData(nextData);
+        return nextData;
       }
       return prev;
     });
@@ -1556,7 +1428,6 @@ export default function App() {
 
   const handleOpenNewBill = (scope: CategoryScope = 'casa') => {
     setEditingBill(null);
-    setBillModalMode('bill');
     setDefaultScopeForBill(scope);
     setIsBillModalOpen(true);
   };

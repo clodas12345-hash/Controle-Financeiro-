@@ -1,4 +1,4 @@
-import { Transaction, Bill, HomeUtilityReading, HomeTask, MonthlyBudget, Pet, PetCareRecord, ModuleId, CompanyProfile, CompanyClient, CompanyDocument } from '../types';
+import { Transaction, Bill, HomeUtilityReading, HomeTask, MonthlyBudget, Pet, PetCareRecord, ModuleId, CompanyProfile, CompanyClient, CompanyDocument, isVariableBill } from '../types';
 import {
   initialHomeReadings,
   initialHomeTasks,
@@ -190,7 +190,7 @@ export function resetToDefaults() {
   localStorage.removeItem(KEYS.HOME_READINGS);
   localStorage.removeItem(KEYS.HOME_TASKS);
   localStorage.removeItem(KEYS.BUDGETS);
-  localStorage.removeItem(KEYS.DAILY_LOGS);
+  localStorage.removeItem('fin_control_daily_logs_v1');
   localStorage.removeItem(KEYS.CREDIT_CARDS);
   localStorage.removeItem(KEYS.PETS);
   localStorage.removeItem(KEYS.PET_CARE);
@@ -347,6 +347,178 @@ export function getBaseBillTitle(title: string): string {
     .trim();
 }
 
+export function syncMonthlyBillsFromPreviousMonth(
+  existingBills: Bill[],
+  targetMonth: string
+): { updatedBills: Bill[]; changed: boolean; count: number } {
+  if (!targetMonth || targetMonth === 'todos') {
+    return { updatedBills: existingBills, changed: false, count: 0 };
+  }
+
+  const [tYear, tMonth] = targetMonth.split('-').map(Number);
+  if (isNaN(tYear) || isNaN(tMonth)) {
+    return { updatedBills: existingBills, changed: false, count: 0 };
+  }
+
+  let changed = false;
+  let count = 0;
+  const updatedBills = [...existingBills];
+
+  // 1. Calculate calendar previous month (M-1)
+  const prevDate = new Date(tYear, tMonth - 2, 1);
+  const immediatePrevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+
+  // 2. Identify the best reference month containing bills prior to targetMonth
+  const hasImmediatePrevBills = existingBills.some(
+    (b) => !b.estorno && (b.dueDate || '').startsWith(immediatePrevMonth)
+  );
+
+  const priorMonths = Array.from(
+    new Set(
+      existingBills
+        .filter((b) => !b.estorno && (b.dueDate || '').slice(0, 7) < targetMonth)
+        .map((b) => (b.dueDate || '').slice(0, 7))
+    )
+  ).sort().reverse();
+
+  const sourceMonth = hasImmediatePrevBills
+    ? immediatePrevMonth
+    : (priorMonths[0] || immediatePrevMonth);
+
+  // 3. Find source bills from the previous month
+  const billsFromSourceMonth = existingBills.filter((b) => {
+    if (b.estorno) return false;
+    if (b.recurring === 'unico') return false;
+    return (b.dueDate || '').startsWith(sourceMonth);
+  });
+
+  // Also include any other recurring monthly bills that might not have appeared in sourceMonth
+  const otherRecurringBills = existingBills.filter((b) => {
+    if (b.estorno) return false;
+    if (b.recurring !== 'mensal') return false;
+    const cleanT = b.title.trim().toLowerCase().replace(/\s+/g, ' ');
+    const sc = (b.scope || 'casa').toLowerCase();
+    return !billsFromSourceMonth.some((sb) => {
+      const sbTitle = sb.title.trim().toLowerCase().replace(/\s+/g, ' ');
+      const sbScope = (sb.scope || 'casa').toLowerCase();
+      return sbScope === sc && sbTitle === cleanT;
+    });
+  });
+
+  const candidateBills = [...billsFromSourceMonth, ...otherRecurringBills];
+
+  // 4. Process each candidate bill into targetMonth
+  for (const prevBill of candidateBills) {
+    const scopeKey = (prevBill.scope || 'casa').toLowerCase();
+    const rawTitle = prevBill.title.trim();
+    const baseTitle = rawTitle.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim().toLowerCase();
+
+    // Check installments
+    let nextTitle = rawTitle;
+    let nextInstallment = prevBill.installment ? { ...prevBill.installment } : undefined;
+    const instMatch = rawTitle.match(/^(.*?)\s*\((\d+)\/(\d+)\)$/);
+    if (instMatch) {
+      const name = instMatch[1].trim();
+      const cur = parseInt(instMatch[2], 10);
+      const tot = parseInt(instMatch[3], 10);
+      if (cur >= tot) {
+        // Parcela finalizada no mês anterior, não cria mais no próximo mês
+        continue;
+      }
+      nextTitle = `${name} (${cur + 1}/${tot})`;
+      nextInstallment = { current: cur + 1, total: tot };
+    } else if (prevBill.installment && prevBill.installment.current >= prevBill.installment.total) {
+      // Parcela já finalizada
+      continue;
+    } else if (prevBill.installment) {
+      nextInstallment = { current: prevBill.installment.current + 1, total: prevBill.installment.total };
+    }
+
+    // Check if bill already exists in targetMonth
+    const existingIndex = updatedBills.findIndex((b) => {
+      if (b.estorno) return false;
+      if (!(b.dueDate || '').startsWith(targetMonth)) return false;
+      const bScope = (b.scope || 'casa').toLowerCase();
+      const bBaseTitle = b.title.trim().replace(/\s*\(\d+\/\d+\)\s*$/, '').trim().toLowerCase();
+      return bScope === scopeKey && bBaseTitle === baseTitle;
+    });
+
+    if (existingIndex >= 0) {
+      const existing = updatedBills[existingIndex];
+      // Update values according to previous month if 0 or pending fixed bill
+      if (existing.amount === 0 && prevBill.amount > 0) {
+        existing.amount = prevBill.amount;
+        changed = true;
+      } else if (
+        existing.status === 'pendente' &&
+        !isVariableBill(existing.title, existing.category) &&
+        prevBill.amount > 0 &&
+        existing.amount !== prevBill.amount
+      ) {
+        existing.amount = prevBill.amount;
+        changed = true;
+      }
+    } else {
+      // Create new bill for targetMonth
+      const prevDay = parseInt((prevBill.dueDate || '').split('-')[2] || '10', 10);
+      const maxDays = new Date(tYear, tMonth, 0).getDate();
+      const targetDay = Math.min(Math.max(isNaN(prevDay) ? 10 : prevDay, 1), maxDays);
+      const newDueDate = `${targetMonth}-${String(targetDay).padStart(2, '0')}`;
+
+      const newBill: Bill = {
+        id: `bill_auto_${targetMonth}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        title: nextTitle,
+        amount: prevBill.amount, // Valor conforme as contas do mês anterior
+        dueDate: newDueDate,
+        category: prevBill.category,
+        scope: prevBill.scope || 'casa',
+        paymentMethod: prevBill.paymentMethod || 'PIX',
+        status: 'pendente', // Pendente para o novo mês
+        recurring: prevBill.recurring || 'mensal',
+        excludeFromTotals: !!prevBill.excludeFromTotals,
+        autoPay: !!prevBill.autoPay,
+        installment: nextInstallment,
+        recipient: prevBill.recipient,
+        notes: prevBill.notes,
+        barcode: undefined,
+        pixCode: undefined,
+        paidDate: undefined,
+      };
+
+      updatedBills.push(newBill);
+      changed = true;
+      count++;
+    }
+  }
+
+  // Deduplicate pass across updatedBills for targetMonth
+  const dedupMap = new Map<string, Bill>();
+  const finalBills: Bill[] = [];
+  for (const bill of updatedBills) {
+    const month = (bill.dueDate || '').slice(0, 7);
+    const titleKey = bill.title.toLowerCase().trim().replace(/\s+/g, ' ');
+    const scopeKey = (bill.scope || 'casa').toLowerCase();
+    const dKey = `${scopeKey}___${month}___${titleKey}`;
+
+    if (!dedupMap.has(dKey)) {
+      dedupMap.set(dKey, bill);
+      finalBills.push(bill);
+    } else {
+      const existing = dedupMap.get(dKey)!;
+      if (existing.status !== 'pago' && bill.status === 'pago') {
+        const idx = finalBills.indexOf(existing);
+        if (idx >= 0) finalBills[idx] = bill;
+        dedupMap.set(dKey, bill);
+        changed = true;
+      } else {
+        changed = true;
+      }
+    }
+  }
+
+  return { updatedBills: finalBills, changed, count };
+}
+
 export {
   getDueDateBusinessInfo,
   getEffectiveDueDate,
@@ -354,3 +526,4 @@ export {
   getBrazilianHolidays,
 } from './businessDays';
 export type { DueDateBusinessInfo } from './businessDays';
+
