@@ -13,7 +13,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Transaction, MonthlyBudget } from '../types';
-import { formatBRL, formatDateBR } from '../lib/storage';
+import { formatBRL, formatDateBR, formatMonthName } from '../lib/storage';
 import {
   ResponsiveContainer,
   PieChart,
@@ -81,6 +81,22 @@ export const AnalyticsModule: React.FC<AnalyticsModuleProps> = memo(({
     return totals;
   }, [expenses]);
 
+  const currentMonthCategoryData = useMemo(() => {
+    const totals: { [key: string]: number } = {};
+    expenses
+      .filter((e) => e.date.startsWith(currentMonthStr))
+      .forEach((e) => {
+        totals[e.category] = (totals[e.category] || 0) + e.amount;
+      });
+    
+    return Object.keys(totals)
+      .map((cat) => ({
+        name: cat,
+        value: totals[cat],
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [expenses, currentMonthStr]);
+
   // Scope totals
   const scopeTotals = useMemo(() => {
     const totals = {
@@ -106,6 +122,7 @@ export const AnalyticsModule: React.FC<AnalyticsModuleProps> = memo(({
   })), [scopeTotals]);
 
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isCategoryPieExpanded, setIsCategoryPieExpanded] = useState(true);
   const [isScopeExpanded, setIsScopeExpanded] = useState(false);
   const [isBudgetHealthExpanded, setIsBudgetHealthExpanded] = useState(false);
   const [isBudgetTableExpanded, setIsBudgetTableExpanded] = useState(false);
@@ -160,6 +177,75 @@ export const AnalyticsModule: React.FC<AnalyticsModuleProps> = memo(({
 
       {isExpanded && (
         <div className="space-y-6 animate-fadeIn">
+
+          {/* Gráfico de Pizza: Distribuição por Categoria (Mês Atual) */}
+          <div className="bg-[#161618] border border-white/5 rounded-3xl p-6">
+            <div 
+              onClick={() => setIsCategoryPieExpanded(!isCategoryPieExpanded)}
+              className="flex items-center justify-between cursor-pointer mb-4"
+            >
+              <h3 className="text-xs uppercase tracking-wider font-medium text-white/50">
+                Distribuição de Despesas por Categoria ({formatMonthName(currentMonthStr).split(' de ')[0]})
+              </h3>
+              {isCategoryPieExpanded ? <ChevronUp className="w-4 h-4 text-white/50" /> : <ChevronDown className="w-4 h-4 text-white/50" />}
+            </div>
+            {isCategoryPieExpanded && (
+              <div className="h-72 w-full animate-fadeIn flex flex-col items-center">
+                {currentMonthCategoryData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={currentMonthCategoryData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={85}
+                        paddingAngle={5}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {currentMonthCategoryData.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{ 
+                          backgroundColor: '#1A1A1C', 
+                          borderColor: 'rgba(255,255,255,0.1)', 
+                          borderRadius: '12px',
+                          color: '#ffffff',
+                          fontSize: '11px',
+                          fontWeight: 'bold'
+                        }}
+                        formatter={(val: number) => [formatBRL(val)]}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-white/30 italic">
+                    <PieIcon className="w-8 h-8 mb-2 opacity-20" />
+                    <p className="text-xs">Nenhuma despesa registrada este mês</p>
+                  </div>
+                )}
+                
+                {currentMonthCategoryData.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 mt-2 w-full">
+                    {currentMonthCategoryData.slice(0, 6).map((item, index) => (
+                      <div key={item.name} className="flex items-center gap-2">
+                        <div 
+                          className="w-2 h-2 rounded-full shrink-0" 
+                          style={{ backgroundColor: COLORS[index % COLORS.length] }} 
+                        />
+                        <span className="text-[10px] text-white/60 truncate" title={item.name}>
+                          {item.name}: <strong className="text-white/80">{formatBRL(item.value)}</strong>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Collapsible Section Container Helper */}
           <div className="bg-[#161618] border border-white/5 rounded-3xl p-6">

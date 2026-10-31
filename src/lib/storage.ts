@@ -23,6 +23,7 @@ const KEYS = {
   COMPANY_CLIENTS: 'fin_control_company_clients_v1',
   COMPANY_DOCUMENTS: 'fin_control_company_documents_v1',
   INCOME_PROFILE: 'fin_control_income_profile_v1',
+  REMINDER_DAYS_BEFORE: 'fin_control_reminder_days_v1',
 };
 
 export const DEFAULT_INITIAL_COMPANY_PROFILE: CompanyProfile = {
@@ -273,6 +274,22 @@ export function formatDateBR(dateStr: string): string {
   return dateStr;
 }
 
+export function formatMonthName(yearMonth: string): string {
+  if (!yearMonth) return '';
+  try {
+    const [year, month] = yearMonth.split('-');
+    const months = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    const monthIdx = parseInt(month, 10) - 1;
+    if (monthIdx < 0 || monthIdx > 11 || isNaN(monthIdx)) return yearMonth;
+    return `${months[monthIdx]} de ${year}`;
+  } catch {
+    return yearMonth;
+  }
+}
+
 export function getTodayStr(): string {
   const d = new Date();
   const year = d.getFullYear();
@@ -337,6 +354,15 @@ export function setIncomeProfile(profile: IncomeProfile): void {
   localStorage.setItem(KEYS.INCOME_PROFILE, profile);
 }
 
+export function getReminderDaysBefore(): number {
+  const val = localStorage.getItem(KEYS.REMINDER_DAYS_BEFORE);
+  return val ? parseInt(val, 10) : 3; // Default 3 days
+}
+
+export function setReminderDaysBefore(days: number): void {
+  localStorage.setItem(KEYS.REMINDER_DAYS_BEFORE, String(days));
+}
+
 export function getBaseBillTitle(title: string): string {
   if (!title) return '';
   return title
@@ -350,14 +376,14 @@ export function getBaseBillTitle(title: string): string {
 export function syncMonthlyBillsFromPreviousMonth(
   existingBills: Bill[],
   targetMonth: string
-): { updatedBills: Bill[]; changed: boolean; count: number } {
+): { updatedBills: Bill[]; changed: boolean; count: number; syncedTitles: string[] } {
   if (!targetMonth || targetMonth === 'todos') {
-    return { updatedBills: existingBills, changed: false, count: 0 };
+    return { updatedBills: existingBills, changed: false, count: 0, syncedTitles: [] };
   }
 
   const [tYear, tMonth] = targetMonth.split('-').map(Number);
   if (isNaN(tYear) || isNaN(tMonth)) {
-    return { updatedBills: existingBills, changed: false, count: 0 };
+    return { updatedBills: existingBills, changed: false, count: 0, syncedTitles: [] };
   }
 
   let changed = false;

@@ -25,7 +25,7 @@ import {
   ArrowUp
 } from 'lucide-react';
 import { Bill, CategoryScope, Transaction, TransactionCategory, PaymentMethod, isVariableBill } from '../types';
-import { formatBRL, formatDateBR, getDueDateBusinessInfo, getEffectiveDueDate, getTodayStr } from '../lib/storage';
+import { formatBRL, formatDateBR, getDueDateBusinessInfo, getEffectiveDueDate, getTodayStr, formatMonthName } from '../lib/storage';
 
 interface BillsModuleProps {
   bills: Bill[];
@@ -68,6 +68,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
   const [viewType, setViewType] = useState<'todos' | 'faturas' | 'despesas' | 'estornos'>('todos');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [syncNotification, setSyncNotification] = useState<{ count: number; titles: string[]; monthStr: string } | null>(null);
+  const [isAlreadySyncedModalOpen, setIsAlreadySyncedModalOpen] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = () => {
@@ -85,7 +86,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
   // Copiar Contas Mensais states and helpers
   const [isCopySectionOpen, setIsCopySectionOpen] = useState(false);
   const [bankModalItem, setBankModalItem] = useState<{ isOpen: boolean, isPix: boolean, item?: any, isPaid?: boolean }>({ isOpen: false, isPix: false });
-  const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
+  const [isFiltersExpanded, setIsFiltersExpanded] = useState(true);
   const now = new Date();
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const [viewMonthStr, setViewMonthStr] = useState<string>(currentMonthStr);
@@ -180,21 +181,6 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
     ? selectedTargetMonth
     : targetOptions[0] || '';
 
-  const formatMonthName = (yearMonth: string) => {
-    if (!yearMonth) return '';
-    try {
-      const [year, month] = yearMonth.split('-');
-      const months = [
-        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-      ];
-      const monthIdx = parseInt(month, 10) - 1;
-      if (monthIdx < 0 || monthIdx > 11 || isNaN(monthIdx)) return yearMonth;
-      return `${months[monthIdx]} de ${year}`;
-    } catch {
-      return yearMonth;
-    }
-  };
 
   const shiftMonth = (dateStr: string, monthsToShift: number): string => {
     try {
@@ -298,130 +284,152 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
     original: Bill | Transaction;
   }
 
-  const unifiedItems: UnifiedItem[] = [];
+  const sortedItems = React.useMemo(() => {
+    const unifiedItems: UnifiedItem[] = [];
 
-  // Adicionar Faturas se o filtro de tipo permitir
-  if (viewType === 'todos' || viewType === 'faturas') {
-    bills.forEach((b) => {
-      unifiedItems.push({
-        isTransaction: false,
-        id: b.id,
-        title: b.title,
-        amount: b.amount,
-        dueDate: b.dueDate,
-        category: b.category,
-        scope: b.scope,
-        paymentMethod: b.paymentMethod,
-        status: b.status,
-        recurring: b.recurring,
-        notes: b.notes,
-        excludeFromTotals: b.excludeFromTotals,
-        installment: b.installment,
-        includeInCarDaily: b.includeInCarDaily,
-        recipient: b.recipient,
-        estorno: b.estorno,
-        original: b,
-      });
-    });
-  }
-
-  // Adicionar Lançamentos/Despesas Diárias de Casa se o filtro permitir
-  if ((viewType === 'todos' || viewType === 'despesas') && transactions) {
-    transactions
-      .filter((t) => t.type === 'despesa' && t.scope === 'casa' && !t.id.startsWith('tx_auto_bill_'))
-      .forEach((t) => {
+    // Adicionar Faturas se o filtro de tipo permitir
+    if (viewType === 'todos' || viewType === 'faturas') {
+      bills.forEach((b) => {
         unifiedItems.push({
-          isTransaction: true,
-          id: t.id,
-          title: t.description,
-          amount: t.amount,
-          dueDate: t.date,
-          category: t.category,
-          scope: t.scope,
-          paymentMethod: t.paymentMethod,
-          status: t.paid ? 'pago' : 'pendente',
-          recurring: t.recurring ? 'Recorrente' : 'Único',
-          notes: t.notes,
-          excludeFromTotals: false,
-          original: t,
+          isTransaction: false,
+          id: b.id,
+          title: b.title,
+          amount: b.amount,
+          dueDate: b.dueDate,
+          category: b.category,
+          scope: b.scope,
+          paymentMethod: b.paymentMethod,
+          status: b.status,
+          recurring: b.recurring,
+          notes: b.notes,
+          excludeFromTotals: b.excludeFromTotals,
+          installment: b.installment,
+          includeInCarDaily: b.includeInCarDaily,
+          recipient: b.recipient,
+          estorno: b.estorno,
+          original: b,
         });
       });
-  }
-
-  const filteredItems = unifiedItems.filter((item) => {
-    if (viewType === 'estornos') return !!item.estorno;
-    if (viewType === 'faturas') return !item.isTransaction && !item.estorno;
-    if (viewType === 'despesas') return item.isTransaction && !item.estorno;
-    
-    // Na visualização "Tudo Unificado", vamos ocultar estornos para dar foco em contas,
-    // ou deixá-los? O usuário pediu para SEPARAR. Então em "Tudo" talvez não deva mostrar estorno?
-    // "Separar a aba estorno da aba conta" sugere que eles não devem se misturar.
-    if (viewType === 'todos' && item.estorno) return false;
-
-    const itemMonth = (item.dueDate || '').slice(0, 7);
-    if (viewMonthStr !== 'todos' && itemMonth !== viewMonthStr) {
-      return false;
     }
-    if (statusFilter === 'meses_seguintes') {
-      if ((item.dueDate || '').slice(0, 7) <= currentMonthStr) return false;
-    } else if (statusFilter === 'todos') {
-      if (item.status === 'pago') return false;
-    } else if (statusFilter !== 'todos' && item.status !== statusFilter) {
-      return false;
+
+    // Adicionar Lançamentos/Despesas Diárias de Casa se o filtro permitir
+    if ((viewType === 'todos' || viewType === 'despesas') && transactions) {
+      transactions
+        .filter((t) => t.type === 'despesa' && t.scope === 'casa' && !t.id.startsWith('tx_auto_bill_'))
+        .forEach((t) => {
+          unifiedItems.push({
+            isTransaction: true,
+            id: t.id,
+            title: t.description,
+            amount: t.amount,
+            dueDate: t.date,
+            category: t.category,
+            scope: t.scope,
+            paymentMethod: t.paymentMethod,
+            status: t.paid ? 'pago' : 'pendente',
+            recurring: t.recurring ? 'Recorrente' : 'Único',
+            notes: t.notes,
+            excludeFromTotals: false,
+            original: t,
+          });
+        });
     }
-    if (scopeFilter !== 'todos' && item.scope !== scopeFilter) return false;
-    if (paymentFilter === 'com_pagamento' && item.paymentMethod === 'SEM PAGAMENTO') return false;
-    if (paymentFilter === 'sem_pagamento' && item.paymentMethod !== 'SEM PAGAMENTO') return false;
-    return true;
-  });
 
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const filtered = unifiedItems.filter((item) => {
+      if (viewType === 'estornos') return !!item.estorno;
+      if (viewType === 'faturas') return !item.isTransaction && !item.estorno;
+      if (viewType === 'despesas') return item.isTransaction && !item.estorno;
+      
+      if (viewType === 'todos' && item.estorno) return false;
 
-  const sortedItems = [...filteredItems].sort((a, b) => {
-    const getStatusPriority = (item: any) => {
-      let status = item.status;
-      if (item.isTransaction && status === 'pendente' && getEffectiveDueDate(item.dueDate) < todayStr) {
-        status = 'atrasado';
+      const itemMonth = (item.dueDate || '').slice(0, 7);
+      if (viewMonthStr !== 'todos' && itemMonth !== viewMonthStr) {
+        return false;
       }
-      if (status === 'atrasado') return 0;
-      if (status === 'pendente') return 1;
-      return 2; // pago
-    };
+      if (statusFilter === 'meses_seguintes') {
+        if ((item.dueDate || '').slice(0, 7) <= currentMonthStr) return false;
+      } else if (statusFilter === 'todos') {
+        if (item.status === 'pago') return false;
+      } else if (statusFilter !== 'todos' && item.status !== statusFilter) {
+        return false;
+      }
+      if (scopeFilter !== 'todos' && item.scope !== scopeFilter) return false;
+      if (paymentFilter === 'com_pagamento' && item.paymentMethod === 'SEM PAGAMENTO') return false;
+      if (paymentFilter === 'sem_pagamento' && item.paymentMethod !== 'SEM PAGAMENTO') return false;
+      return true;
+    });
 
-    const priorityA = getStatusPriority(a);
-    const priorityB = getStatusPriority(b);
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-    if (priorityA !== priorityB) {
-      return priorityA - priorityB;
-    }
+    return [...filtered].sort((a, b) => {
+      const getStatusPriority = (item: any) => {
+        let status = item.status;
+        if (item.isTransaction && status === 'pendente' && getEffectiveDueDate(item.dueDate) < todayStr) {
+          status = 'atrasado';
+        }
+        if (status === 'atrasado') return 0;
+        if (status === 'pendente') return 1;
+        return 2; // pago
+      };
 
-    return (a.dueDate || "").localeCompare(b.dueDate || "");
-  });
+      const priorityA = getStatusPriority(a);
+      const priorityB = getStatusPriority(b);
+
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      return (a.dueDate || "").localeCompare(b.dueDate || "");
+    });
+  }, [bills, transactions, viewType, viewMonthStr, statusFilter, scopeFilter, paymentFilter, currentMonthStr]);
 
   const currentYearStr = `${now.getFullYear()}`;
   const targetMonthFilter = viewMonthStr !== 'todos' ? viewMonthStr : currentMonthStr;
 
-  const monthPending = bills
-    .filter((b) => (b.status === 'pendente' || b.status === 'atrasado') && b.paymentMethod !== 'SEM PAGAMENTO' && b.dueDate.startsWith(targetMonthFilter))
-    .reduce((acc, b) => acc + b.amount, 0);
+  const { monthPending, yearPending, monthPaid, yearPaid } = React.useMemo(() => {
+    const mPending = bills
+      .filter((b) => (b.status === 'pendente' || b.status === 'atrasado') && b.paymentMethod !== 'SEM PAGAMENTO' && b.dueDate.startsWith(targetMonthFilter))
+      .reduce((acc, b) => acc + b.amount, 0);
 
-  const yearPending = bills
-    .filter((b) => (b.status === 'pendente' || b.status === 'atrasado') && b.paymentMethod !== 'SEM PAGAMENTO' && b.dueDate.startsWith(currentYearStr))
-    .reduce((acc, b) => acc + b.amount, 0);
+    const yPending = bills
+      .filter((b) => (b.status === 'pendente' || b.status === 'atrasado') && b.paymentMethod !== 'SEM PAGAMENTO' && b.dueDate.startsWith(currentYearStr))
+      .reduce((acc, b) => acc + b.amount, 0);
 
-  const monthPaid = bills
-    .filter((b) => b.status === 'pago' && b.dueDate.startsWith(targetMonthFilter))
-    .reduce((acc, b) => acc + b.amount, 0);
+    const mPaid = bills
+      .filter((b) => b.status === 'pago' && b.dueDate.startsWith(targetMonthFilter))
+      .reduce((acc, b) => acc + b.amount, 0);
 
-  const yearPaid = bills
-    .filter((b) => b.status === 'pago' && b.dueDate.startsWith(currentYearStr))
-    .reduce((acc, b) => acc + b.amount, 0);
+    const yPaid = bills
+      .filter((b) => b.status === 'pago' && b.dueDate.startsWith(currentYearStr))
+      .reduce((acc, b) => acc + b.amount, 0);
+    
+    return { monthPending: mPending, yearPending: yPending, monthPaid: mPaid, yearPaid: yPaid };
+  }, [bills, targetMonthFilter, currentYearStr]);
 
-  const allEstornos = bills.filter(b => !!b.estorno);
-  const pendingEstornos = bills.filter(b => b.estorno && b.estorno.status === 'pendente');
-  const receivedEstornos = bills.filter(b => b.estorno && b.estorno.status === 'recebido');
-  const hasPendingEstornos = pendingEstornos.length > 0;
-  const pendingEstornosTotal = pendingEstornos.reduce((acc, b) => acc + (b.estorno?.amount || b.amount || 0), 0);
+  const { allEstornos, pendingEstornos, receivedEstornos, hasPendingEstornos, pendingEstornosTotal } = React.useMemo(() => {
+    const all = bills.filter(b => !!b.estorno);
+    const pending = bills.filter(b => b.estorno && b.estorno.status === 'pendente');
+    const received = bills.filter(b => b.estorno && b.estorno.status === 'recebido');
+    return {
+      allEstornos: all,
+      pendingEstornos: pending,
+      receivedEstornos: received,
+      hasPendingEstornos: pending.length > 0,
+      pendingEstornosTotal: pending.reduce((acc, b) => acc + (b.estorno?.amount || b.amount || 0), 0)
+    };
+  }, [bills]);
+
+  const groupedItems = React.useMemo(() => {
+    if (viewMonthStr !== 'todos') return null;
+    const grouped: { [m: string]: typeof sortedItems } = {};
+    sortedItems.forEach((it) => {
+      const m = (it.dueDate || '').slice(0, 7) || 'Outros';
+      if (!grouped[m]) grouped[m] = [];
+      grouped[m].push(it);
+    });
+    const months = Object.keys(grouped).sort().reverse();
+    return months.map(m => ({ monthKey: m, items: grouped[m] }));
+  }, [sortedItems, viewMonthStr]);
 
   const [isEstornosListModalOpen, setIsEstornosListModalOpen] = useState(false);
   const [estornoFilterTab, setEstornoFilterTab] = useState<'pendente' | 'recebido' | 'todos'>('pendente');
@@ -457,6 +465,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
       onUpdateBill(updatedBill);
     }
   };
+
 
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -579,7 +588,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                         monthStr: target
                       });
                     } else {
-                      alert('Todas as contas deste mês já estão sincronizadas!');
+                      setIsAlreadySyncedModalOpen(true);
                     }
                   }
                 }}
@@ -760,7 +769,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                     onClick={() => setScopeFilter(sc)}
                     className={`px-3 py-1 rounded-full text-xs font-semibold capitalize transition ${
                       scopeFilter === sc
-                        ? 'bg-white/10 text-white font-bold border border-white/20'
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
                         : 'bg-[#1A1A1C] text-white/40 hover:text-white border border-white/5'
                     }`}
                   >
@@ -809,19 +818,10 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
             <p className="text-slate-500 text-xs">Tente ajustar os filtros acima ou cadastre uma nova conta ou lançamento.</p>
           </div>
         ) : viewMonthStr === 'todos' ? (
-          (() => {
-            const grouped: { [m: string]: typeof sortedItems } = {};
-            sortedItems.forEach((it) => {
-              const m = (it.dueDate || '').slice(0, 7) || 'Outros';
-              if (!grouped[m]) grouped[m] = [];
-              grouped[m].push(it);
-            });
-            const months = Object.keys(grouped).sort().reverse();
-            return months.map((monthKey) => {
-              const monthItems = grouped[monthKey];
-              const monthTotal = monthItems.reduce((acc, i) => acc + i.amount, 0);
-              return (
-                <div key={monthKey} className="space-y-3 bg-[#161618] border border-white/5 rounded-3xl p-4 sm:p-5">
+          (groupedItems || []).map(({ monthKey, items: monthItems }) => {
+            const monthTotal = monthItems.reduce((acc, i) => acc + i.amount, 0);
+            return (
+              <div key={monthKey} className="space-y-3 bg-[#161618] border border-white/5 rounded-3xl p-4 sm:p-5">
                   <div className="flex items-center justify-between pb-3 border-b border-white/10">
                     <div className="flex items-center gap-2">
                       <CalendarDays className="w-5 h-5 text-amber-400" />
@@ -1287,9 +1287,8 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                     })}
                   </div>
                 </div>
-              );
-            });
-          })()
+            );
+          })
         ) : (
           <div className="space-y-3">
             {sortedItems.map((item) => {
@@ -2122,6 +2121,32 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
               type="button"
               onClick={() => setSyncNotification(null)}
               className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-2xl transition shadow-lg shadow-emerald-500/20 cursor-pointer"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+      {/* Modal Moderno: Já Sincronizado */}
+      {isAlreadySyncedModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[#1C1C1E] border border-white/10 rounded-[2rem] max-w-sm w-full p-6 shadow-2xl space-y-6 animate-scaleIn text-center">
+            <div className="flex flex-col items-center space-y-4">
+              <div className="w-16 h-16 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center border border-blue-500/30">
+                <CheckCircle2 className="w-8 h-8" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold text-white">Tudo em Dia!</h3>
+                <p className="text-sm text-white/50">
+                  Todas as contas deste mês já estão sincronizadas com o mês anterior.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsAlreadySyncedModalOpen(false)}
+              className="w-full py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-2xl transition cursor-pointer"
             >
               Entendido
             </button>

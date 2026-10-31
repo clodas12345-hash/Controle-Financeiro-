@@ -278,12 +278,16 @@ export default function App() {
 
   // Synchronize 2-hour recurring native notifications for unpaid due bills
   useEffect(() => {
-    const todayStr = getTodayStr();
+    const reminderDays = Number(localStorage.getItem('fin_control_reminder_days_v1') || 3);
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + reminderDays);
+    const targetDateStr = targetDate.toISOString().split('T')[0];
+
     const dueBills = (data.bills || []).filter(
-      (b) => (b.status === 'pendente' || b.status === 'atrasado') && getEffectiveDueDate(b.dueDate) <= todayStr && b.paymentMethod !== 'SEM PAGAMENTO'
+      (b) => (b.status === 'pendente' || b.status === 'atrasado') && getEffectiveDueDate(b.dueDate) <= targetDateStr && b.paymentMethod !== 'SEM PAGAMENTO'
     );
     const dueTx = (data.transactions || []).filter(
-      (t) => t.type === 'despesa' && !t.paid && getEffectiveDueDate(t.date) <= todayStr && !t.id.startsWith('tx_auto_bill_')
+      (t) => t.type === 'despesa' && !t.paid && getEffectiveDueDate(t.date) <= targetDateStr && !t.id.startsWith('tx_auto_bill_')
     );
     const totalDueCount = dueBills.length + dueTx.length;
     const names = [...dueBills.map((b) => b.title), ...dueTx.map((t) => t.description)];

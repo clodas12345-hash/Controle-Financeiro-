@@ -361,7 +361,6 @@ export const NotificationsAndAuthorizationsModal: React.FC<NotificationsAndAutho
               Ativar Todas Permissões
             </button>
           </div>
-
           {/* Section 1: Sound Settings */}
           <div className="space-y-3">
             <h4 className="text-[11px] font-black uppercase tracking-wider text-blue-400 flex items-center gap-2">
@@ -418,6 +417,51 @@ export const NotificationsAndAuthorizationsModal: React.FC<NotificationsAndAutho
                 </div>
               </div>
             )}
+          </div>
+
+          {/* New Section: Reminder Days Settings */}
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
+              <Bell className="w-4 h-4" />
+              Configurações de Lembrete
+            </h4>
+            <div className="bg-slate-900/60 border border-white/5 rounded-2xl p-4 space-y-4">
+              <div className="text-[11px] text-slate-300">Com quantos dias de antecedência deseja ser lembrado?</div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: 0, label: 'No dia' },
+                  { value: 1, label: '1 dia' },
+                  { value: 2, label: '2 dias' },
+                  { value: 3, label: '3 dias' },
+                  { value: 5, label: '5 dias' },
+                  { value: 7, label: '7 dias' },
+                ].map((opt) => {
+                  const reminderDays = Number(localStorage.getItem('fin_control_reminder_days_v1') || 3);
+                  const isSelected = reminderDays === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        localStorage.setItem('fin_control_reminder_days_v1', String(opt.value));
+                        // Force state update to re-render buttons
+                        setSoundEnabled(s => s); 
+                      }}
+                      className={`px-4 py-2 rounded-xl border text-xs font-bold transition cursor-pointer ${
+                        isSelected
+                          ? 'bg-amber-500 border-amber-600 text-slate-950 shadow-md'
+                          : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-slate-500 italic">
+                O app enviará alertas automáticos 4 vezes ao dia (9h, 13h, 18h e 21h) no período selecionado.
+              </p>
+            </div>
           </div>
 
           {/* Section 2: Detailed 8 Permissions List */}

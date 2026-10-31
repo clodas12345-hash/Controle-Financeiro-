@@ -183,6 +183,8 @@ export async function cancelDueBillsReminders(): Promise<void> {
 }
 
 export async function syncDueBillsRecurringReminders(dueBills: any[], dueTransactions: any[]): Promise<void> {
+  const reminderDays = Number(localStorage.getItem('fin_control_reminder_days_v1') || 3);
+  
   const allItems = [
     ...(dueBills || []).map(b => ({ id: b.id, title: b.title, amount: b.amount, dueDate: b.dueDate, type: 'bill' })),
     ...(dueTransactions || []).map(t => ({ id: t.id, title: t.description || 'Despesa', amount: t.amount, dueDate: t.date, type: 'tx' }))
@@ -211,13 +213,18 @@ export async function syncDueBillsRecurringReminders(dueBills: any[], dueTransac
 
       const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
-      // For each item, schedule across today and next 2 days
+      // For each item, schedule across today and next days based on setting
       allItems.forEach((item) => {
         const amountFormatted = currencyFormatter.format(item.amount);
         const title = `⏰ Conta Vencendo: ${item.title}`;
         const body = `Valor: ${amountFormatted} - Vencimento: ${item.dueDate}. Toque em "Marcar como Paga" para quitar!`;
 
-        for (let dayOffset = 0; dayOffset < 3; dayOffset++) {
+        // If reminderDays is 0, we only notify on the day it's due or overdue.
+        // If reminderDays > 0, we notify starting from today until it's paid.
+        // We limit scheduling to the next 7 days max to avoid hitting OS limits
+        const daysToSchedule = Math.max(1, Math.min(reminderDays + 1, 7));
+
+        for (let dayOffset = 0; dayOffset < daysToSchedule; dayOffset++) {
           const targetDate = new Date();
           targetDate.setDate(targetDate.getDate() + dayOffset);
 
