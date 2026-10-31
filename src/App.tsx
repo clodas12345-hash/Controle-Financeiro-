@@ -1371,14 +1371,14 @@ export default function App() {
   const handleSyncMonthlyBills = useCallback((targetMonthStr?: string) => {
     const today = getTodayStr();
     const currentMonth = targetMonthStr || today.slice(0, 7);
-    let result = { count: 0, syncedTitles: [] as string[] };
+    let result = { count: 0, syncedBills: [] as Bill[] };
 
     setData((prev) => {
-      const { updatedBills, changed, count, syncedTitles } = syncMonthlyBillsFromPreviousMonth(
+      const { updatedBills, changed, count, syncedBills } = syncMonthlyBillsFromPreviousMonth(
         prev.bills || [],
         currentMonth
       );
-      result = { count, syncedTitles };
+      result = { count, syncedBills };
       if (changed) {
         const nextData = {
           ...prev,

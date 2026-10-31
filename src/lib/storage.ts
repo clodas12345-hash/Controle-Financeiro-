@@ -376,20 +376,17 @@ export function getBaseBillTitle(title: string): string {
 export function syncMonthlyBillsFromPreviousMonth(
   existingBills: Bill[],
   targetMonth: string
-): { updatedBills: Bill[]; changed: boolean; count: number; syncedTitles: string[] } {
+): { updatedBills: Bill[]; changed: boolean; count: number; syncedBills: Bill[] } {
   if (!targetMonth || targetMonth === 'todos') {
-    return { updatedBills: existingBills, changed: false, count: 0, syncedTitles: [] };
+    return { updatedBills: existingBills, changed: false, count: 0, syncedBills: [] };
   }
 
   const [tYear, tMonth] = targetMonth.split('-').map(Number);
-  if (isNaN(tYear) || isNaN(tMonth)) {
-    return { updatedBills: existingBills, changed: false, count: 0, syncedTitles: [] };
-  }
-
   let changed = false;
   let count = 0;
-  const syncedTitles: string[] = [];
+  const syncedBills: Bill[] = [];
   const updatedBills = [...existingBills];
+
 
   // 1. Calculate calendar previous month (M-1)
   const prevDate = new Date(tYear, tMonth - 2, 1);
@@ -475,7 +472,7 @@ export function syncMonthlyBillsFromPreviousMonth(
       // Update values according to previous month if 0 or pending fixed bill
       if (existing.amount === 0 && prevBill.amount > 0) {
         existing.amount = prevBill.amount;
-        if (!syncedTitles.includes(existing.title)) syncedTitles.push(`${existing.title} (Atualizada)`);
+        syncedBills.push({ ...existing });
         changed = true;
       } else if (
         existing.status === 'pendente' &&
@@ -484,7 +481,7 @@ export function syncMonthlyBillsFromPreviousMonth(
         existing.amount !== prevBill.amount
       ) {
         existing.amount = prevBill.amount;
-        if (!syncedTitles.includes(existing.title)) syncedTitles.push(`${existing.title} (Valor Atualizado)`);
+        syncedBills.push({ ...existing });
         changed = true;
       }
     } else {
@@ -515,7 +512,7 @@ export function syncMonthlyBillsFromPreviousMonth(
       };
 
       updatedBills.push(newBill);
-      syncedTitles.push(nextTitle);
+      syncedBills.push(newBill);
       changed = true;
       count++;
     }
@@ -546,7 +543,7 @@ export function syncMonthlyBillsFromPreviousMonth(
     }
   }
 
-  return { updatedBills: finalBills, changed, count, syncedTitles };
+  return { updatedBills: finalBills, changed, count, syncedBills };
 }
 
 export {

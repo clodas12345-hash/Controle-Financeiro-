@@ -42,7 +42,7 @@ interface BillsModuleProps {
   onUpdateTransaction?: (tx: Transaction) => void;
   onDeleteDuplicateBills?: () => void;
   onImportMasterBills?: () => void;
-  onSyncMonthlyBills?: (targetMonthStr?: string) => { count: number; syncedTitles: string[] };
+  onSyncMonthlyBills?: (targetMonthStr?: string) => { count: number; syncedBills: Bill[] };
 }
 
 export const BillsModule: React.FC<BillsModuleProps> = memo(({
@@ -67,7 +67,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
   const [paymentFilter, setPaymentFilter] = useState<'com_pagamento' | 'sem_pagamento' | 'todos'>('com_pagamento');
   const [viewType, setViewType] = useState<'todos' | 'faturas' | 'despesas' | 'estornos'>('todos');
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [syncNotification, setSyncNotification] = useState<{ count: number; titles: string[]; monthStr: string } | null>(null);
+  const [syncNotification, setSyncNotification] = useState<{ count: number; bills: Bill[]; monthStr: string } | null>(null);
   const [isAlreadySyncedModalOpen, setIsAlreadySyncedModalOpen] = useState(false);
 
   useEffect(() => {
@@ -99,7 +99,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
       if (result && result.count > 0) {
         setSyncNotification({
           count: result.count,
-          titles: result.syncedTitles,
+          bills: result.syncedBills,
           monthStr: target
         });
       }
@@ -584,7 +584,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                     if (result && result.count > 0) {
                       setSyncNotification({
                         count: result.count,
-                        titles: result.syncedTitles,
+                        bills: result.syncedBills,
                         monthStr: target
                       });
                     } else {
@@ -2102,27 +2102,65 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
             </div>
 
             <div className="bg-black/20 rounded-2xl border border-white/5 overflow-hidden">
-              <div className="px-4 py-2 border-b border-white/5 bg-white/5">
+              <div className="px-4 py-2 border-b border-white/5 bg-white/5 flex items-center justify-between">
                 <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Contas Adicionadas:</span>
+                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest">Ações:</span>
               </div>
-              <div className="max-h-40 overflow-y-auto px-4 py-2 custom-scrollbar">
-                <ul className="space-y-1.5">
-                  {syncNotification.titles.map((title, i) => (
-                    <li key={i} className="text-sm text-white/80 flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                      {title}
-                    </li>
+              <div className="max-h-64 overflow-y-auto px-2 py-2 custom-scrollbar">
+                <div className="space-y-2">
+                  {syncNotification.bills.map((bill) => (
+                    <div key={bill.id} className="text-sm bg-white/5 border border-white/5 rounded-xl p-2.5 flex items-center justify-between gap-3 animate-fadeIn">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                        <span className="text-white/80 truncate font-medium">{bill.title}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSyncNotification(prev => {
+                              if (!prev) return null;
+                              const nextBills = prev.bills.filter(b => b.id !== bill.id);
+                              if (nextBills.length === 0) return null;
+                              return { ...prev, bills: nextBills, count: nextBills.length };
+                            });
+                          }}
+                          className="p-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-slate-950 rounded-lg transition cursor-pointer"
+                          title="Aceitar Conta"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Deseja recusar e excluir a conta "${bill.title}" deste mês?`)) {
+                              onDeleteBill(bill.id);
+                              setSyncNotification(prev => {
+                                if (!prev) return null;
+                                const nextBills = prev.bills.filter(b => b.id !== bill.id);
+                                if (nextBills.length === 0) return null;
+                                return { ...prev, bills: nextBills, count: nextBills.length };
+                              });
+                            }
+                          }}
+                          className="p-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white rounded-lg transition cursor-pointer"
+                          title="Recusar/Excluir Conta"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </div>
             </div>
 
             <button
               type="button"
               onClick={() => setSyncNotification(null)}
-              className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-2xl transition shadow-lg shadow-emerald-500/20 cursor-pointer"
+              className="w-full py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-2xl transition cursor-pointer"
             >
-              Entendido
+              Concluir Revisão
             </button>
           </div>
         </div>
