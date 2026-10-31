@@ -362,6 +362,7 @@ export function syncMonthlyBillsFromPreviousMonth(
 
   let changed = false;
   let count = 0;
+  const syncedTitles: string[] = [];
   const updatedBills = [...existingBills];
 
   // 1. Calculate calendar previous month (M-1)
@@ -448,6 +449,7 @@ export function syncMonthlyBillsFromPreviousMonth(
       // Update values according to previous month if 0 or pending fixed bill
       if (existing.amount === 0 && prevBill.amount > 0) {
         existing.amount = prevBill.amount;
+        if (!syncedTitles.includes(existing.title)) syncedTitles.push(`${existing.title} (Atualizada)`);
         changed = true;
       } else if (
         existing.status === 'pendente' &&
@@ -456,6 +458,7 @@ export function syncMonthlyBillsFromPreviousMonth(
         existing.amount !== prevBill.amount
       ) {
         existing.amount = prevBill.amount;
+        if (!syncedTitles.includes(existing.title)) syncedTitles.push(`${existing.title} (Valor Atualizado)`);
         changed = true;
       }
     } else {
@@ -486,6 +489,7 @@ export function syncMonthlyBillsFromPreviousMonth(
       };
 
       updatedBills.push(newBill);
+      syncedTitles.push(nextTitle);
       changed = true;
       count++;
     }
@@ -516,7 +520,7 @@ export function syncMonthlyBillsFromPreviousMonth(
     }
   }
 
-  return { updatedBills: finalBills, changed, count };
+  return { updatedBills: finalBills, changed, count, syncedTitles };
 }
 
 export {

@@ -1367,14 +1367,14 @@ export default function App() {
   const handleSyncMonthlyBills = useCallback((targetMonthStr?: string) => {
     const today = getTodayStr();
     const currentMonth = targetMonthStr || today.slice(0, 7);
-    let updatedOrAddedCount = 0;
+    let result = { count: 0, syncedTitles: [] as string[] };
 
     setData((prev) => {
-      const { updatedBills, changed, count } = syncMonthlyBillsFromPreviousMonth(
+      const { updatedBills, changed, count, syncedTitles } = syncMonthlyBillsFromPreviousMonth(
         prev.bills || [],
         currentMonth
       );
-      updatedOrAddedCount = count;
+      result = { count, syncedTitles };
       if (changed) {
         const nextData = {
           ...prev,
@@ -1386,7 +1386,7 @@ export default function App() {
       return prev;
     });
 
-    return updatedOrAddedCount;
+    return result;
   }, []);
 
   // Handler: Update Budget

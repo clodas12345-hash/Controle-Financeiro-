@@ -42,7 +42,7 @@ interface BillsModuleProps {
   onUpdateTransaction?: (tx: Transaction) => void;
   onDeleteDuplicateBills?: () => void;
   onImportMasterBills?: () => void;
-  onSyncMonthlyBills?: (targetMonthStr?: string) => number;
+  onSyncMonthlyBills?: (targetMonthStr?: string) => { count: number; syncedTitles: string[] };
 }
 
 export const BillsModule: React.FC<BillsModuleProps> = memo(({
@@ -67,6 +67,7 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
   const [paymentFilter, setPaymentFilter] = useState<'com_pagamento' | 'sem_pagamento' | 'todos'>('com_pagamento');
   const [viewType, setViewType] = useState<'todos' | 'faturas' | 'despesas' | 'estornos'>('todos');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [syncNotification, setSyncNotification] = useState<{ count: number; titles: string[]; monthStr: string } | null>(null);
 
   useEffect(() => {
     const handleClickOutside = () => {
@@ -93,7 +94,14 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
   useEffect(() => {
     if (onSyncMonthlyBills) {
       const target = viewMonthStr !== 'todos' ? viewMonthStr : currentMonthStr;
-      onSyncMonthlyBills(target);
+      const result = onSyncMonthlyBills(target);
+      if (result && result.count > 0) {
+        setSyncNotification({
+          count: result.count,
+          titles: result.syncedTitles,
+          monthStr: target
+        });
+      }
     }
   }, [viewMonthStr, currentMonthStr, onSyncMonthlyBills]);
 
@@ -556,6 +564,31 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
+
+              {/* Manual Sync Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (onSyncMonthlyBills) {
+                    const target = viewMonthStr !== 'todos' ? viewMonthStr : currentMonthStr;
+                    const result = onSyncMonthlyBills(target);
+                    if (result && result.count > 0) {
+                      setSyncNotification({
+                        count: result.count,
+                        titles: result.syncedTitles,
+                        monthStr: target
+                      });
+                    } else {
+                      alert('Todas as contas deste mês já estão sincronizadas!');
+                    }
+                  }
+                }}
+                className="p-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-xl border border-amber-500/20 transition cursor-pointer flex items-center gap-2"
+                title="Sincronizar contas do mês anterior"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-bold uppercase tracking-tight hidden sm:inline">Sincronizar</span>
+              </button>
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
@@ -2050,6 +2083,48 @@ export const BillsModule: React.FC<BillsModuleProps> = memo(({
                 Fechar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Moderno de Notificação de Sincronização */}
+      {syncNotification && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[#1C1C1E] border border-white/10 rounded-[2rem] max-w-sm w-full p-6 shadow-2xl space-y-6 animate-scaleIn">
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center border border-emerald-500/30">
+                <CheckCircle2 className="w-8 h-8" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold text-white">Contas Sincronizadas!</h3>
+                <p className="text-sm text-white/50">
+                  {syncNotification.count} conta(s) recorrente(s) foram adicionadas para {formatMonthName(syncNotification.monthStr)}.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-black/20 rounded-2xl border border-white/5 overflow-hidden">
+              <div className="px-4 py-2 border-b border-white/5 bg-white/5">
+                <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Contas Adicionadas:</span>
+              </div>
+              <div className="max-h-40 overflow-y-auto px-4 py-2 custom-scrollbar">
+                <ul className="space-y-1.5">
+                  {syncNotification.titles.map((title, i) => (
+                    <li key={i} className="text-sm text-white/80 flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      {title}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSyncNotification(null)}
+              className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-2xl transition shadow-lg shadow-emerald-500/20 cursor-pointer"
+            >
+              Entendido
+            </button>
           </div>
         </div>
       )}
